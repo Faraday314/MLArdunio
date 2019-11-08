@@ -1,4 +1,5 @@
 #include <KDE.h>
+#include <math.h>
 
 float *dataPtr;
 Kernel *kernelPtr;
@@ -17,12 +18,22 @@ void setup() {
 
   float *dataPtrCpy = dataPtr;
 
+  //Generate Kernels
   for(unsigned int i = 0; i < dataSize; i++) {   
     kernels[i] = *(new Kernel(*dataPtrCpy, H));
     dataPtrCpy++;
   }
+
+
+  
 };
 
 void loop() {
   // put your main code here, to run repeatedly:  
+}
+
+float max(float *arrayStart, unsigned int arrayLength) {
+  float *cpyPtr = arrayStart;
+  for(i = 1; i < arrayLength; i++) {
+  }
 }
