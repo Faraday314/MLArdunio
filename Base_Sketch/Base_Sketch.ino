@@ -40,8 +40,10 @@ void loop() {
 void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold, float *outputPtr) {
   Kernel *kernelPtrCpy = kernelPtr;
   float currentX = lowerBound;
+  Serial.println(currentX);
   float lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
-  currentX += algStep;
+  Serial.println(lastValue);
+  currentX += algStep/2;
   float currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
   float delta = currentValue - lastValue;
 
@@ -61,10 +63,12 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
   int sgn = lastSgn;
 
   unsigned int arrSize = 0;
-  float *minRanges = new float[0];
-  float *maxRanges = new float[0];
+  float minRanges[0];
+  float maxRanges[0];
 
-  while(currentX <= upperBound) {
+  float *minRangePtr = &minRanges[0];
+
+  while(currentX < upperBound) {
     lastSgn = sgn;
     currentX += algStep;
     lastValue = currentValue;
@@ -73,12 +77,25 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
     delta = currentValue - lastValue;
     sgn = signum(delta);
 
+
+    
+   
+/*
     if(sgn - lastSgn > 0) {
       arrSize++;
-      float *newMinArr = new float[arrSize];
-      float *newMaxArr = new float[arrSize];
-      cpyArrayAndAdd(minRanges, arrSize - 1, currentX - algStep, newMinArr);
-    }
+      float newMinArr[arrSize];
+      float newMaxArr[arrSize];
+      float *newMinArrPtr = &newMinArr[0];
+      float *newMaxArrPtr = &newMaxArr[0];
+      cpyArrayAndAdd(minRangePtr, arrSize - 1, currentX - algStep, newMinArrPtr);
+      minRangePtr = &newMinArr[0];
+      float *minRangePtrCpy = minRangePtr;
+      for(int i = 0; i < arrSize; i++) {
+        Serial.println(*minRangePtrCpy);
+        minRangePtrCpy++;
+      }
+      Serial.println("end");
+    }*/
   }
 }
 
@@ -106,9 +123,7 @@ void cpyArrayAndAdd(float *arrInPtr, unsigned int arrInSize, float valToAdd, flo
   float *cpyArrInPtr = arrInPtr;
   float *cpyArrOutPtr = outputPtr;
   for(int i = 0; i < arrInSize; i++) {
-
     *cpyArrOutPtr = *cpyArrInPtr;
-    
     cpyArrInPtr++;
     cpyArrOutPtr++;
   }
