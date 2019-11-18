@@ -80,8 +80,7 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
       arrSize++;
     }
   }
-
-  float minRanges[arrSize];
+  
   float maxRanges[arrSize];
 
   unsigned int index = 0;
@@ -96,7 +95,6 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
     sgn = signum(delta);
 
     if(sgn - lastSgn > 0) {
-      minRanges[index] = currentX-algStep;
       maxRanges[index] = currentX;
       index++;
     }
