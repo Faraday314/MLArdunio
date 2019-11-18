@@ -33,5 +33,5 @@ static float Kernel::kernelConsensus(Kernel *kernelPtr, unsigned int listSize, f
 		}
 		kernelPtrCpy++;
 	}
-	return sum;
+	return sum/listSize;
 }

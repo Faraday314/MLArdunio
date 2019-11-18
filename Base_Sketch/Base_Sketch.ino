@@ -25,8 +25,7 @@ void setup() {
     kernels[i] = *(new Kernel(*dataPtrCpy, H));
     dataPtrCpy++;
   }
-
-  Kernel *kernelPtr = &kernels[0];
+  Kernel *kernelPtr = &kernels[0];  
   float *outputPtr;
 
   findMin(kernelPtr, dataSize, 0.0, 3.0, 0.1, 0.01, outputPtr);
@@ -40,9 +39,7 @@ void loop() {
 void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold, float *outputPtr) {
   Kernel *kernelPtrCpy = kernelPtr;
   float currentX = lowerBound;
-  Serial.println(currentX);
   float lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
-  Serial.println(lastValue);
   currentX += algStep/2;
   float currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
   float delta = currentValue - lastValue;
@@ -63,10 +60,31 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
   int sgn = lastSgn;
 
   unsigned int arrSize = 0;
-  float minRanges[0];
-  float maxRanges[0];
 
-  float *minRangePtr = &minRanges[0];
+  float currentXCpy = currentX;
+  float lastSgnCpy = lastSgn;
+  float sgnCpy = sgn;
+  float lastValueCpy = lastValue;
+  float currentValueCpy = currentValue;
+  
+  while(currentXCpy < upperBound) {
+    lastSgnCpy = sgnCpy;
+    currentXCpy += algStep;
+    lastValueCpy = currentValueCpy;
+
+    currentValueCpy = Kernel::kernelConsensus(kernelPtr, dataSize, currentXCpy);
+    delta = currentValueCpy - lastValueCpy;
+    sgnCpy = signum(delta);
+
+    if(sgnCpy - lastSgnCpy > 0) {
+      arrSize++;
+    }
+  }
+
+  float minRanges[arrSize];
+  float maxRanges[arrSize];
+
+  unsigned int index = 0;
 
   while(currentX < upperBound) {
     lastSgn = sgn;
@@ -77,26 +95,14 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
     delta = currentValue - lastValue;
     sgn = signum(delta);
 
-
-    
-   
-/*
     if(sgn - lastSgn > 0) {
-      arrSize++;
-      float newMinArr[arrSize];
-      float newMaxArr[arrSize];
-      float *newMinArrPtr = &newMinArr[0];
-      float *newMaxArrPtr = &newMaxArr[0];
-      cpyArrayAndAdd(minRangePtr, arrSize - 1, currentX - algStep, newMinArrPtr);
-      minRangePtr = &newMinArr[0];
-      float *minRangePtrCpy = minRangePtr;
-      for(int i = 0; i < arrSize; i++) {
-        Serial.println(*minRangePtrCpy);
-        minRangePtrCpy++;
-      }
-      Serial.println("end");
-    }*/
+      minRanges[index] = currentX-algStep;
+      maxRanges[index] = currentX;
+      index++;
+    }
   }
+
+  Serial.println(maxRanges[0]);
 }
 
 float maxArray(float *arrayStart, unsigned int arrayLength) {
