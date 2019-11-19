@@ -8,7 +8,12 @@ const float H = 0.5;
 const float MAX_FLOAT_VAL = 3.4028235e38;
 const float MIN_FLOAT_VAL = -MAX_FLOAT_VAL;
 
+float output[32];
+
 void setup() {
+
+  
+  
   // put your setup code here, to run once:
   float data[] = {0.0f,0.1f,0.1f,0.5f,0.5f,0.5f,0.7f,0.7f,1.0f,2.0f,2.1f,2.1f,2.5f,2.5f,2.5f,2.7f,2.7f,3.0f};
   dataSize = sizeof(data)/sizeof(data[0]);
@@ -26,17 +31,17 @@ void setup() {
     dataPtrCpy++;
   }
   Kernel *kernelPtr = &kernels[0];  
-  float *outputPtr;
-
-  findMin(kernelPtr, dataSize, 0.0, 3.0, 0.1, 0.01, outputPtr);
-  
+  unsigned int outputSize = findMin(kernelPtr, dataSize, 0.0, 3.0, 0.1, 0.01);
+  for(int i = 0; i < outputSize; i++) {
+    Serial.println(output[i]);
+  }
 };
 
 void loop() {
   // put your main code here, to run repeatedly:  
 }
 
-void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold, float *outputPtr) {
+unsigned int findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
   Kernel *kernelPtrCpy = kernelPtr;
   float currentX = lowerBound;
   float lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
@@ -66,7 +71,8 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
   float sgnCpy = sgn;
   float lastValueCpy = lastValue;
   float currentValueCpy = currentValue;
-  
+
+  //Find how many mins there are
   while(currentXCpy < upperBound) {
     lastSgnCpy = sgnCpy;
     currentXCpy += algStep;
@@ -82,9 +88,9 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
   }
   
   float maxRanges[arrSize];
-
   unsigned int index = 0;
 
+  //Find the upper bound of all the mins
   while(currentX < upperBound) {
     lastSgn = sgn;
     currentX += algStep;
@@ -100,7 +106,57 @@ void findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float u
     }
   }
 
-  Serial.println(maxRanges[0]);
+  boolean lastMidFloored = false;
+  float dividers[arrSize];
+  float flooredDividers[arrSize];
+  unsigned int usedVals = 0;
+  unsigned int usedFloorVals = 0;
+
+  //Refine the estimated mins
+  for(unsigned int i = 0; i < arrSize; i++) {
+    lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, maxRanges[i]-algStep);
+    float mid = (2*maxRanges[i] - algStep)/2;
+    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+    float lBound = maxRanges[i] - algStep;
+    float uBound = maxRanges[i];
+    while(abs(currentValue-lastValue) > lossThreshold) {
+      float rmid = (mid + uBound)/2;
+      float lmid = (lBound + mid)/2;
+
+      float rmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, rmid);
+      float lmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, lmid);
+
+      mid = rmidVal > lmidVal ? lmid : rmid;
+
+      lastValue = currentValue;
+      currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+    }
+    if(abs(currentValue - lastValue) == 0) {
+      flooredDividers[usedFloorVals] = mid;
+      usedFloorVals++;
+      lastMidFloored = true;
+    }
+    else if(lastMidFloored) {
+      dividers[usedVals] = (flooredDividers[usedFloorVals - 1] + mid)/2;
+      usedVals++;
+      lastMidFloored = false;
+    }
+    else {
+      dividers[usedVals] = mid;
+      usedVals++;
+    }
+  }
+
+  if(usedVals < 32) {
+    for(int i = 0; i < usedVals; i++) {
+      output[i] = dividers[i];
+    }
+  }
+  else {
+    Serial.println("If you are reading this, everything has gone horribly wrong and you should give up. Good luck!");
+  }
+
+  return usedVals;
 }
 
 float maxArray(float *arrayStart, unsigned int arrayLength) {
@@ -121,17 +177,6 @@ float minArray(float *arrayStart, unsigned int arrayLength) {
     cpyPtr++;
   }
   return minVal;
-}
-
-void cpyArrayAndAdd(float *arrInPtr, unsigned int arrInSize, float valToAdd, float *outputPtr) {
-  float *cpyArrInPtr = arrInPtr;
-  float *cpyArrOutPtr = outputPtr;
-  for(int i = 0; i < arrInSize; i++) {
-    *cpyArrOutPtr = *cpyArrInPtr;
-    cpyArrInPtr++;
-    cpyArrOutPtr++;
-  }
-  *cpyArrOutPtr = valToAdd;
 }
 
 int signum(float val) {
