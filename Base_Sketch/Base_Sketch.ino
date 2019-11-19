@@ -1,20 +1,48 @@
 #include <KDE.h>
 #include <math.h>
+#include <SPI.h>
+#include <SD.h>
 
+//File Vars
+File myFile;
+const float fPEM = .1 * 60 * 1000;
+int lastFile = 0;
+float lastTime = 0;
+boolean allowWrite = true;
+unsigned const int MAX_NUMBER_OF_FILES = 3; 
+
+//ML Vars
 float *dataPtr;
 Kernel *kernelPtr;
-int dataSize;
+unsigned int dataSize;
 const float H = 0.5;
 const float MAX_FLOAT_VAL = 3.4028235e38;
 const float MIN_FLOAT_VAL = -MAX_FLOAT_VAL;
-
+unsigned const int DATACOLLECT = 0;
+unsigned const int LEARN = 1;
+unsigned const int OPERATE = 2;
+unsigned int state = DATACOLLECT;
 float output[32];
 
 void setup() {
 
-  
-  
-  // put your setup code here, to run once:
+  //SD Card
+  Serial.print("Initializing SD card...");
+
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+    while (1);
+  }
+  Serial.println("initialization done.");
+  myFile = SD.open("ms_0.txt", FILE_WRITE);
+  if(myFile){
+    Serial.println("Opened");
+  }
+  else{
+    Serial.println("everything is bad");
+  }
+
+  //KDE stuff
   float data[] = {0.0f,0.1f,0.1f,0.5f,0.5f,0.5f,0.7f,0.7f,1.0f,2.0f,2.1f,2.1f,2.5f,2.5f,2.5f,2.7f,2.7f,3.0f};
   dataSize = sizeof(data)/sizeof(data[0]);
   dataPtr = &data[0];
@@ -38,7 +66,38 @@ void setup() {
 };
 
 void loop() {
-  // put your main code here, to run repeatedly:  
+  if(state == DATACOLLECT) {
+    unsigned int times = fmod(floor(round(millis()) / fPEM), MAX_NUMBER_OF_FILES);
+    Serial.println(times);
+    if(allowWrite){
+      //If anything is typed in the serial monitor stop writing
+      if(Serial.read() != -1){
+       allowWrite = false;
+      }
+      if(lastFile != times) {
+        myFile.close();
+ 
+        lastFile = times;
+
+        if(SD.exists("ms_" + (String) times + ".txt")) {
+          SD.remove("ms_" + (String) times + ".txt");
+        }
+        
+        myFile = SD.open("ms_" + (String) times + ".txt", FILE_WRITE);
+      }
+      else{
+          if (myFile) {
+            Serial.println("Wrote to file");
+            myFile.println("time = " + (String) round(millis()));
+         } else {
+            Serial.println((String) "error opening " + (String) "mills: " + (String) times + (String) ".txt");
+         }
+       }
+    }
+    else{
+      myFile.close();
+    }
+  }
 }
 
 unsigned int findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
