@@ -21,6 +21,7 @@ const float MIN_FLOAT_VAL = -MAX_FLOAT_VAL;
 unsigned const int DATACOLLECT = 0;
 unsigned const int LEARN = 1;
 unsigned const int OPERATE = 2;
+unsigned const int RELEARN = 3;
 unsigned int state = DATACOLLECT;
 float output[32];
 
@@ -61,11 +62,14 @@ void setup() {
   Kernel *kernelPtr = &kernels[0];  
   unsigned int outputSize = findMin(kernelPtr, dataSize, 0.0, 3.0, 0.1, 0.01);
   for(int i = 0; i < outputSize; i++) {
-    Serial.println(output[i]);
+    //Serial.println(output[i]);
   }
-};
+  state = LEARN;
+}
 
 void loop() {
+
+  //Datacollect state is WIP
   if(state == DATACOLLECT) {
     unsigned int times = fmod(floor(round(millis()) / fPEM), MAX_NUMBER_OF_FILES);
     Serial.println(times);
@@ -98,6 +102,28 @@ void loop() {
       myFile.close();
     }
   }
+  if(state == LEARN) {
+    Serial.println(getNumDataPoints());
+    state = OPERATE;
+  }
+}
+
+unsigned int getNumDataPoints() {
+  unsigned int numDataPoints = 0;
+  
+  for(int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
+    if(myFile) {
+      while(myFile.available()) {
+        numDataPoints++;
+        Serial.write(myFile.read());
+      }
+    }
+    else {
+      Serial.println("error opening MS_" + (String) i + ".txt");
+    }
+  }
+  return numDataPoints;
 }
 
 unsigned int findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
@@ -216,26 +242,6 @@ unsigned int findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound,
   }
 
   return usedVals;
-}
-
-float maxArray(float *arrayStart, unsigned int arrayLength) {
-  float *cpyPtr = arrayStart;
-  float maxVal = MIN_FLOAT_VAL;
-  for(unsigned int i = 0; i < arrayLength; i++) {
-    maxVal = max(*cpyPtr, maxVal);
-    cpyPtr++;
-  }
-  return maxVal;
-}
-
-float minArray(float *arrayStart, unsigned int arrayLength) {
-  float *cpyPtr = arrayStart;
-  float minVal = MAX_FLOAT_VAL;
-  for(unsigned int i = 0; i < arrayLength; i++) {
-    minVal = min(*cpyPtr, minVal);
-    cpyPtr++;
-  }
-  return minVal;
 }
 
 int signum(float val) {
