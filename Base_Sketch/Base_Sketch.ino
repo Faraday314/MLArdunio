@@ -10,6 +10,7 @@ int lastFile = 0;
 float lastTime = 0;
 boolean allowWrite = true;
 unsigned const int MAX_NUMBER_OF_FILES = 3; 
+(60/fPEM)*
 
 //ML Vars
 float *dataPtr;
@@ -102,9 +103,52 @@ void loop() {
       myFile.close();
     }
   }
-  if(state == LEARN) {
-    Serial.println(getNumDataPoints());
+  else if(state == LEARN) {
+    dataSize = getNumDataPoints();
+    unsigned long timeData[dataSize];
+    float amperageData[dataSize];
+    getAllData(&timeData[0], &amperageData[0]);
     state = OPERATE;
+  }
+}
+
+void getAllData(long *timeData, float *amperageData) {
+  long *cpyTimeData = timeData;
+  float *cpyAmperageData = amperageData;
+
+  for(int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
+    Serial.println("ran " + (String) i);
+    if(myFile) {
+      boolean first = true;
+      String timeDataPoint = "";
+      String amperageDataPoint = "";
+      while(myFile.available()) {
+        char readInChar = myFile.read();
+        if(readInChar == '\n') {
+          first = true;
+          //*timeData = timeDataPoint.toInt();
+          //*amperageData = amperageDataPoint.toFloat();
+          timeData++;
+          //amperageData++;
+          timeDataPoint = "";
+          amperageDataPoint = "";
+        }
+        else if(readInChar == ',') {
+          first = false;
+        }
+        else if(first) {
+          timeDataPoint += readInChar;
+        }
+        else {
+          amperageDataPoint += readInChar;
+        }
+      }
+      myFile.close();
+    }
+    else {
+      Serial.println("error opening MS_" + (String) i + ".txt");
+    }
   }
 }
 
@@ -115,9 +159,11 @@ unsigned int getNumDataPoints() {
     myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
     if(myFile) {
       while(myFile.available()) {
-        numDataPoints++;
-        Serial.write(myFile.read());
+        if(myFile.read() == '\n') {
+          numDataPoints++;
+        }
       }
+      myFile.close();
     }
     else {
       Serial.println("error opening MS_" + (String) i + ".txt");
