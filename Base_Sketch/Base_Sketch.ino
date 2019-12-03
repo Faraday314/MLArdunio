@@ -9,8 +9,10 @@ const float fPEM = .1 * 60 * 1000;
 int lastFile = 0;
 float lastTime = 0;
 boolean allowWrite = true;
-unsigned const int MAX_NUMBER_OF_FILES = 3; 
-(60/fPEM)*
+unsigned const int MAX_NUMBER_OF_FILES = 3;
+
+//PURE EVIL
+unsigned int sizeOfData = 0;
 
 //ML Vars
 float *dataPtr;
@@ -37,10 +39,10 @@ void setup() {
   }
   Serial.println("initialization done.");
   myFile = SD.open("ms_0.txt", FILE_WRITE);
-  if(myFile){
+  if(myFile) {
     Serial.println("Opened");
   }
-  else{
+  else {
     Serial.println("everything is bad");
   }
 
@@ -106,43 +108,41 @@ void loop() {
   else if(state == LEARN) {
     dataSize = getNumDataPoints();
     unsigned long timeData[dataSize];
-    float amperageData[dataSize];
-    getAllData(&timeData[0], &amperageData[0]);
+    long timeData2[dataSize];
+    float amperageData2[dataSize];
+    getAllData(&timeData2[0], &amperageData2[0], dataSize);
     state = OPERATE;
   }
 }
 
-void getAllData(long *timeData, float *amperageData) {
-  long *cpyTimeData = timeData;
-  float *cpyAmperageData = amperageData;
+void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize) {
+
 
   for(int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    
     myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
     Serial.println("ran " + (String) i);
     if(myFile) {
       boolean first = true;
-      String timeDataPoint = "";
-      String amperageDataPoint = "";
+      
+      String addToListTime = "";
+      String addToListAmps = "";
+
+      long timeArr[listSize];
+      float ampArr[listSize];
+      
+      unsigned int i = 0;
       while(myFile.available()) {
-        char readInChar = myFile.read();
-        if(readInChar == '\n') {
-          first = true;
-          //*timeData = timeDataPoint.toInt();
-          //*amperageData = amperageDataPoint.toFloat();
-          timeData++;
-          //amperageData++;
-          timeDataPoint = "";
-          amperageDataPoint = "";
-        }
-        else if(readInChar == ',') {
-          first = false;
-        }
-        else if(first) {
-          timeDataPoint += readInChar;
-        }
-        else {
-          amperageDataPoint += readInChar;
-        }
+        String timeDataPoint = myFile.readStringUntil(',');
+        String amperageDataPoint = myFile.readStringUntil('\n');
+
+        long t = atol(timeDataPoint.c_str());
+        float amp = amperageDataPoint.toFloat();
+        
+        timeArr[i] = t;
+        ampArr[i] = amp;
+        
+        i++;
       }
       myFile.close();
     }
