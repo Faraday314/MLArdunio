@@ -131,20 +131,20 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       long timeArr[listSize];
       float ampArr[listSize];
 
-      String testArr[listSize];
       
-      unsigned int i = 0;
-
-      String test = "";
+      
+      unsigned int idx = 0;
+      unsigned int lower = 0;
+      String testArr[listSize];
+      char charArray[myFile.available()/sizeof('\n')];
       while(myFile.available()) {
-        
         char inChar = myFile.read();
-        test+=inChar;
-        Serial.println(test);
+        charArray[idx] = inChar;
+        idx++;
+       
 
         /*String timeDataPoint = "";
         String amperageDataPoint = "";
-        String timeDataPoint = myFile.readStringUntil('\n');
         String amperageDataPoint = myFile.readStringUntil('\n');
 
         long t = atol(timeDataPoint.c_str());
@@ -158,7 +158,7 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
         */
       }
       myFile.close();
-
+      Serial.println(charArray);
     }
     else {
       Serial.println("error opening MS_" + (String) i + ".txt");
