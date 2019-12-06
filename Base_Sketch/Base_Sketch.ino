@@ -122,43 +122,59 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
     
     myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
     Serial.println("ran " + (String) i);
+
+    long timeArr[listSize];
+    unsigned int timeTracker = 0;
+    float ampArr[listSize];
+    unsigned int ampTracker = 0;
+    
     if(myFile) {
-      boolean first = true;
-      
-      String addToListTime = "";
-      String addToListAmps = "";
 
-      long timeArr[listSize];
-      float ampArr[listSize];
-
-      
-      
       unsigned int idx = 0;
-      unsigned int lower = 0;
-      String testArr[listSize];
+      unsigned int newLineCount = 0;
       char charArray[myFile.available()/sizeof('\n')];
       while(myFile.available()) {
         char inChar = myFile.read();
         charArray[idx] = inChar;
         idx++;
-       
-
-        /*String timeDataPoint = "";
-        String amperageDataPoint = "";
-        String amperageDataPoint = myFile.readStringUntil('\n');
-
-        long t = atol(timeDataPoint.c_str());
-        float amp = amperageDataPoint.toFloat();
-        
-        timeArr[i] = t;
-        ampArr[i] = amp;
-
-        Serial.println(timeDataPoint);
-        Serial.println(amperageDataPoint);
-        */
+        if(inChar == '\n') {
+          newLineCount++;
+        }
       }
       myFile.close();
-      Serial.println(charArray);
+      unsigned int count = 0;
+      unsigned int newLineIdxes[newLineCount];
+      for(unsigned int i = 0; i < sizeof(charArray)/sizeof(charArray[0]); i++) {
+        if(charArray[i] == '\n') {
+          newLineIdxes[count] = i;
+          count++;
+        }
+      }
+
+      unsigned int m = 0;
+
+      unsigned int startIdx = 0;
+      for(unsigned int i = 0; i < count; i++) {
+        boolean readingTime = true;
+        unsigned int startingIdx = 0;
+        unsigned int currentLocation = 0;
+        for(unsigned int j = startIdx; j < newLineIdxes[i]; j++) {
+          if(charArray[j] == ',' || charArray[j] == '\r') {
+            readingTime = false;
+            char val[j - startingIdx + 1];
+            for(unsigned int k = 0; k < j-startingIdx; k++) {
+              val[k] = charArray[startingIdx+k];
+            }
+            val[j - startingIdx] = '\0';
+            startingIdx = j + 1;
+            m++;
+            Serial.println("num: "+(String) m);
+            Serial.println(val);
+
+          }
+        }
+        startIdx = newLineIdxes[i] + 1;
+      }
     }
     else {
       Serial.println("error opening MS_" + (String) i + ".txt");
