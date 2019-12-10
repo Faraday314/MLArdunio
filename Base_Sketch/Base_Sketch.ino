@@ -154,12 +154,23 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       unsigned int m = 0;
 
       unsigned int startIdx = 0;
+      //For each newline
       for(unsigned int i = 0; i < count; i++) {
         boolean readingTime = true;
         unsigned int startingIdx = 0;
         unsigned int currentLocation = 0;
+        char val[newLineIdxes[i] - startIdx + 1];
         for(unsigned int j = startIdx; j < newLineIdxes[i]; j++) {
-          if(charArray[j] == ',' || charArray[j] == '\r') {
+          if(charArray[j] == ',') {
+            readingTime = false;
+            continue;
+          }
+         
+          else if(readingTime) {
+            val[j - startIdx] = charArray[j];
+          }
+          Serial.println("char: "+(String) charArray[j]);
+          /*if(charArray[j] == ',' || charArray[j] == '\r') {
             readingTime = false;
             char val[j - startingIdx + 1];
             for(unsigned int k = 0; k < j-startingIdx; k++) {
@@ -171,8 +182,12 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
             Serial.println("num: "+(String) m);
             Serial.println(val);
 
-          }
+          }*/
+         
+          
         }
+        val[newLineIdxes[i] - startIdx] = '\0';
+        Serial.println(val);
         startIdx = newLineIdxes[i] + 1;
       }
     }
