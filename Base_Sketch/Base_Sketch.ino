@@ -143,52 +143,53 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       }
       myFile.close();
       unsigned int count = 0;
-      unsigned int newLineIdxes[newLineCount];
+      unsigned int newLineIdxes[newLineCount + 1];
       for(unsigned int i = 0; i < sizeof(charArray)/sizeof(charArray[0]); i++) {
         if(charArray[i] == '\n') {
           newLineIdxes[count] = i;
           count++;
         }
       }
-
+      newLineIdxes[count] = idx;
+      count++;
+      
       unsigned int m = 0;
 
-      unsigned int startIdx = 0;
+      unsigned int startingIdx = 0;
       //For each newline
       for(unsigned int i = 0; i < count; i++) {
         boolean readingTime = true;
-        unsigned int startingIdx = 0;
-        unsigned int currentLocation = 0;
-        char val[newLineIdxes[i] - startIdx + 1];
-        for(unsigned int j = startIdx; j < newLineIdxes[i]; j++) {
-          if(charArray[j] == ',') {
-            readingTime = false;
-            continue;
-          }
-         
-          else if(readingTime) {
-            val[j - startIdx] = charArray[j];
-          }
-          Serial.println("char: "+(String) charArray[j]);
-          /*if(charArray[j] == ',' || charArray[j] == '\r') {
-            readingTime = false;
-            char val[j - startingIdx + 1];
-            for(unsigned int k = 0; k < j-startingIdx; k++) {
-              val[k] = charArray[startingIdx+k];
-            }
-            val[j - startingIdx] = '\0';
-            startingIdx = j + 1;
-            m++;
-            Serial.println("num: "+(String) m);
-            Serial.println(val);
+        unsigned int newLineIdx = newLineIdxes[i];
+        char val[newLineIdx - startingIdx + 1];
 
-          }*/
-         
-          
+        unsigned int commaIdx = 0;
+        for(unsigned int j = startingIdx; j < newLineIdx; j++) {
+          if(charArray[j] == ',') {
+            commaIdx = j;
+          }
         }
-        val[newLineIdxes[i] - startIdx] = '\0';
-        Serial.println(val);
-        startIdx = newLineIdxes[i] + 1;
+
+        char timeData[commaIdx-startingIdx + 1];
+        char ampData[newLineIdx-commaIdx + 1];
+        //For each char between the start index and the next newline
+        for(unsigned int j = startingIdx; j < newLineIdx; j++) {
+          val[j - startingIdx] = charArray[j];
+        }
+        for(unsigned int k = startingIdx; k < commaIdx; k++) {
+          timeData[k - startingIdx] = charArray[k];
+        }
+        for(unsigned int k = commaIdx + 1; k < newLineIdx-2; k++) {
+          Serial.println(k);
+          Serial.println(newLineIdx);
+          ampData[k - commaIdx] = charArray[k];
+        }
+        
+        timeData[commaIdx - startingIdx] = '\0';
+        ampData[newLineIdx - commaIdx] = '\0';
+
+        val[newLineIdx - startingIdx] = '\0';
+        Serial.println(ampData);
+        startingIdx = newLineIdx + 1;
       }
     }
     else {
