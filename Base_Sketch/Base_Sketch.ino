@@ -170,22 +170,24 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
         }
 
         char timeData[commaIdx-startingIdx + 1];
-        char ampData[newLineIdx-commaIdx + 1];
+        char ampData[newLineIdx - (commaIdx + 1)];
         //For each char between the start index and the next newline
         for(unsigned int j = startingIdx; j < newLineIdx; j++) {
           val[j - startingIdx] = charArray[j];
         }
+
         for(unsigned int k = startingIdx; k < commaIdx; k++) {
           timeData[k - startingIdx] = charArray[k];
         }
-        for(unsigned int k = commaIdx + 1; k < newLineIdx-2; k++) {
-          Serial.println(k);
-          Serial.println(newLineIdx);
-          ampData[k - commaIdx] = charArray[k];
+
+        for(unsigned int m = commaIdx + 1; m < newLineIdx - 1; m++) {
+          ampData[m - commaIdx - 1] = charArray[m];
         }
+
+        Serial.println("Expected Size: "+(String) (newLineIdx - (commaIdx + 1)));
         
-        timeData[commaIdx - startingIdx] = '\0';
-        ampData[newLineIdx - commaIdx] = '\0';
+        //timeData[commaIdx - startingIdx] = '\0';
+        ampData[newLineIdx -1 - (commaIdx + 1)] = '\0';
 
         val[newLineIdx - startingIdx] = '\0';
         Serial.println(ampData);
