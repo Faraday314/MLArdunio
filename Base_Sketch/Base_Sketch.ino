@@ -117,18 +117,19 @@ void loop() {
 
 void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize) {
 
+  long timeArr[listSize];
+  float ampArr[listSize];
+  unsigned int tracker = 0;
 
-  for(int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  for(unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     
     myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
     Serial.println("ran " + (String) i);
 
-    long timeArr[listSize];
-    unsigned int timeTracker = 0;
-    float ampArr[listSize];
-    unsigned int ampTracker = 0;
-    
     if(myFile) {
+
+      long *timeArrPtr = &timeArr[0];
+      float *ampArrPtr = &ampArr[0];
 
       unsigned int idx = 0;
       unsigned int newLineCount = 0;
@@ -153,12 +154,9 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       newLineIdxes[count] = idx;
       count++;
       
-      unsigned int m = 0;
-
       unsigned int startingIdx = 0;
       //For each newline
       for(unsigned int i = 0; i < count; i++) {
-        boolean readingTime = true;
         unsigned int newLineIdx = newLineIdxes[i];
         char val[newLineIdx - startingIdx + 1];
 
@@ -179,18 +177,40 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
         for(unsigned int k = startingIdx; k < commaIdx; k++) {
           timeData[k - startingIdx] = charArray[k];
         }
-
+       
         for(unsigned int m = commaIdx + 1; m < newLineIdx - 1; m++) {
           ampData[m - commaIdx - 1] = charArray[m];
         }
 
-        Serial.println("Expected Size: "+(String) (newLineIdx - (commaIdx + 1)));
+        timeData[commaIdx - startingIdx] = '\0';
+
+
         
-        //timeData[commaIdx - startingIdx] = '\0';
-        ampData[newLineIdx -1 - (commaIdx + 1)] = '\0';
+        //char timeDataCpy[commaIdx-startingIdx + 1];
+        //copy(timeData, timeDataCpy, commaIdx-startingIdx + 1);
+
+        long timePt = atol(timeData);
+
+        Serial.println((String) timePt);
+
+        *timeArrPtr = timePt;
+        //memcpy(&timeArr[tracker],&timePt,sizeof(timePt));
+        tracker++;
+        
+        if(i == count - 1) {
+          char ampDataFinal[newLineIdx - commaIdx];
+          for(unsigned int i = 0; i < sizeof(ampData)/sizeof(ampData[0]); i++) {
+            ampDataFinal[i] = ampData[i];
+          }
+
+          ampDataFinal[newLineIdx - commaIdx - 2] = charArray[newLineIdx - 1];
+          ampDataFinal[newLineIdx - commaIdx - 1] = '\0';
+        }
+        
+        ampData[newLineIdx - 1 - (commaIdx + 1)] = '\0';
 
         val[newLineIdx - startingIdx] = '\0';
-        Serial.println(ampData);
+        //Serial.println(ampData);
         startingIdx = newLineIdx + 1;
       }
     }
@@ -198,6 +218,10 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       Serial.println("error opening MS_" + (String) i + ".txt");
     }
   }
+
+  /*for(unsigned int i = 0; i < sizeof(timeArr)/sizeof(timeArr[0]); i++) {
+    Serial.println("time "+(String)timeArr[i]);
+  }*/
 }
 
 unsigned int getNumDataPoints() {
@@ -336,6 +360,10 @@ unsigned int findMin(Kernel *kernelPtr, unsigned int dataSize, float lowerBound,
   }
 
   return usedVals;
+}
+
+void copy(char* src, char* dst, unsigned int len) {
+    memcpy(dst, src, sizeof(src[0])*len);
 }
 
 int signum(float val) {
