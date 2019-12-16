@@ -5,6 +5,8 @@
 
 //File Vars
 File myFile;
+File myFile2;
+File myFile3;
 const float fPEM = .1 * 60 * 1000;
 int lastFile = 0;
 float lastTime = 0;
@@ -13,6 +15,7 @@ unsigned const int MAX_NUMBER_OF_FILES = 3;
 
 //PURE EVIL
 unsigned int sizeOfData = 0;
+long timeDataPtGlobal;
 
 //ML Vars
 float *dataPtr;
@@ -38,14 +41,7 @@ void setup() {
     while (1);
   }
   Serial.println("initialization done.");
-  myFile = SD.open("ms_0.txt", FILE_WRITE);
-  if(myFile) {
-    Serial.println("Opened");
-  }
-  else {
-    Serial.println("everything is bad");
-  }
-
+ 
   //KDE stuff
   float data[] = {0.0f,0.1f,0.1f,0.5f,0.5f,0.5f,0.7f,0.7f,1.0f,2.0f,2.1f,2.1f,2.5f,2.5f,2.5f,2.7f,2.7f,3.0f};
   dataSize = sizeof(data)/sizeof(data[0]);
@@ -123,18 +119,16 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
 
   for(unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     
-    myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
+    myFile2 = SD.open("MS_" + (String) i + ".txt" +'\0', FILE_READ);
     Serial.println("ran " + (String) i);
+    Serial.println((String)i + '\0');
 
-    if(myFile) {
-
-      long *timeArrPtr = &timeArr[0];
-      float *ampArrPtr = &ampArr[0];
+    if(myFile2) {
 
       unsigned int idx = 0;
       unsigned int newLineCount = 0;
-      char charArray[myFile.available()/sizeof('\n')];
-      while(myFile.available()) {
+      char charArray[myFile2.available()/sizeof('\n')];
+      while(myFile2.available()) {
         char inChar = myFile.read();
         charArray[idx] = inChar;
         idx++;
@@ -142,16 +136,17 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
           newLineCount++;
         }
       }
-      myFile.close();
+      myFile2.close();
+
+      continue;
+
       unsigned int count = 0;
       unsigned int newLineIdxes[newLineCount + 1];
       for(unsigned int i = 0; i < sizeof(charArray)/sizeof(charArray[0]); i++) {
         if(charArray[i] == '\n') {
           newLineIdxes[count] = i;
-          count++;
         }
-      }
-      newLineIdxes[count] = idx;
+      }      newLineIdxes[count] = idx;
       count++;
       
       unsigned int startingIdx = 0;
@@ -189,11 +184,20 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
         //char timeDataCpy[commaIdx-startingIdx + 1];
         //copy(timeData, timeDataCpy, commaIdx-startingIdx + 1);
 
-        long timePt = atol(timeData);
 
-        Serial.println((String) timePt);
+        char *endPtr;
+        timeDataPtGlobal = strtol(timeData, &endPtr, 10);
 
-        *timeArrPtr = timePt;
+        if(!*endPtr) {
+          Serial.println("GOOD :)");
+        }
+        else {
+          Serial.println("BAD");
+        }
+
+        //Serial.println(String(timeDataPtGlobal));
+        //timeArr[tracker] = timeDataPtGlobal;
+        //*timeArrPtr = timePt;
         //memcpy(&timeArr[tracker],&timePt,sizeof(timePt));
         tracker++;
         
@@ -228,14 +232,14 @@ unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
   
   for(int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    myFile = SD.open("MS_" + (String) i + ".txt", FILE_READ);
-    if(myFile) {
-      while(myFile.available()) {
-        if(myFile.read() == '\n') {
+    myFile3 = SD.open("MS_" + (String) i + ".txt", FILE_READ);
+    if(myFile3) {
+      while(myFile3.available()) {
+        if(myFile3.read() == '\n') {
           numDataPoints++;
         }
       }
-      myFile.close();
+      myFile3.close();
     }
     else {
       Serial.println("error opening MS_" + (String) i + ".txt");
