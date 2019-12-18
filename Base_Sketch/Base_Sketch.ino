@@ -114,12 +114,12 @@ void loop() {
 
 void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize) {
 
+  long buf1[200];
   long timeArr[18];
+  long buf2[200];
   unsigned int tracker = 0;
 
   for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-
-
 
     file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
     if (!file) {
@@ -138,6 +138,8 @@ void getAllData(long *timeDataPtr, float *amperageDataPtr, unsigned int listSize
       Serial.println();
     }
     Serial.println("Done");
+    //timeArr[0] = 0;
+    buf1[0] = 0;
   
 }
 
