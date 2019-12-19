@@ -23,15 +23,13 @@ float Kernel::getU(float x) {
   return (x - datapoint)/h;
 }
 
-static float Kernel::kernelConsensus(Kernel *kernelPtr, unsigned int listSize, float x) {
+static float Kernel::kernelConsensus(Kernel *kernels, unsigned int listSize, float x) {
 	
-	Kernel *kernelPtrCpy = kernelPtr;
 	float sum = 0;
 	for(unsigned int i = 0; i < listSize; i++) {
-		if(abs(kernelPtrCpy -> getU(x)) < 1) {
-			sum += kernelPtrCpy -> calcValue(x);
+		if(abs(kernels[i].getU(x)) < 1) {
+			sum += kernels[i].calcValue(x);
 		}
-		kernelPtrCpy++;
 	}
-	return sum/listSize;
+	return sum;
 }

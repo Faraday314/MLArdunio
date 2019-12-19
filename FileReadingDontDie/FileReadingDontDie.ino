@@ -1,4 +1,6 @@
 #include <SD.h>
+#include <KDE.h>
+
 #define MAX_NUMBER_OF_FILES 3
 #define DATACOLLECT 0
 #define LEARN 1
@@ -6,8 +8,10 @@
 #define RELEARN 3
 #define fPEM .1*60*1000
 #define H 0.5
-#define MAX_FLOAT_VAL 3.4028235e38;
-#define MIN_FLOAT_VAL -MAX_FLOAT_VAL;
+#define MAX_FLOAT_VAL 3.4028235e38
+#define MIN_FLOAT_VAL -MAX_FLOAT_VAL
+
+#define H 0.5
 
 boolean allowWrite = true;
 unsigned int state = LEARN;
@@ -17,8 +21,17 @@ File file;
 File myFile;
 File myFile2;
 
+long *timeData;
+float *ampData;
+
+Kernel *kernels;
+float *mins;
+
+unsigned int dataSize;
+unsigned int minsSize;
+
 void setup() {
- 
+
   Serial.begin(9600);
   if (!SD.begin(4)) {
     Serial.println("begin error");
@@ -59,24 +72,35 @@ void loop() {
       myFile.close();
     }
   }
-  else if(state == LEARN) {
-    state = OPERATE;
-    unsigned int dataSize = getNumDataPoints();
-    long timeData[dataSize];
-    getAllData(&timeData[0], dataSize);
-    for(unsigned int j = 0; j < sizeof(timeData)/sizeof(timeData[0]); j++) {
-      Serial.print("time: ");
-      Serial.println(String(timeData[j]));
+  else if (state == LEARN) {
+    dataSize = getNumDataPoints();
+
+    ampData = (float*) malloc(dataSize * sizeof(float));
+    timeData = (long*) malloc(dataSize * sizeof(long));
+    getAllData(timeData, &ampData[0], dataSize);
+
+    kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
+
+    for (unsigned int i = 0; i < dataSize; i++) {
+      kernels[i] = *(new Kernel(ampData[i], H));
     }
+
+
+    for(unsigned int i = 0;  i< dataSize; i++) {
+      Serial.print("time: ");
+      Serial.println(timeData[i]);
+    }
+    //findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
+
+    state = OPERATE;
   }
 }
 
-void getAllData(long * timeOutput, unsigned int listSize) {
-  long timeArr[listSize];
+void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
   unsigned int tracker = 0;
-  for (unsigned int i = 0; i < 3; i++) {
-    
-    file = SD.open("MS_"+String(i)+".txt", FILE_READ);
+  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+
+    file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
     if (!file) {
       Serial.println("open error");
       return;
@@ -84,17 +108,12 @@ void getAllData(long * timeOutput, unsigned int listSize) {
     long x;
     float y;
     while (readVals(&x, &y)) {
-      Serial.print("x: ");
-      Serial.println(x);
-      timeArr[tracker] = x;
+      timeOutput[tracker] = x;
+      ampOutput[tracker] = y;
       tracker++;
-      Serial.print("y: ");
-      Serial.println(y);
-      Serial.println();
     }
-    Serial.println("Done");
+    file.close();
   }
-  copy(timeArr,timeOutput,listSize);
 }
 
 unsigned int getNumDataPoints() {
@@ -143,6 +162,127 @@ bool readVals(long* v1, float* v2) {
   *v2 = (float) strtod(ptr, &str);
   return str != ptr;  // true if number found
 }
-void copy(long* src, long* dst, unsigned int len) {
+
+/*void findMin(Kernel *kernels, float *mins, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
+  float currentX = lowerBound;
+  float lastValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
+  currentX += algStep / 2;
+  float currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+  float delta = currentValue - lastValue;
+
+  while (delta == 0.0) {
+    currentX += algStep;
+    lastValue = currentValue;
+    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+    delta = currentValue - lastValue;
+  }
+
+  currentX += algStep;
+  lastValue = currentValue;
+  currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+  delta = currentValue - lastValue;
+
+  int lastSgn = signum(delta);
+  int sgn = lastSgn;
+
+  unsigned int arrSize = 0;
+
+  float currentXCpy = currentX;
+  float lastSgnCpy = lastSgn;
+  float sgnCpy = sgn;
+  float lastValueCpy = lastValue;
+  float currentValueCpy = currentValue;
+
+  //Find how many mins there are
+  while (currentXCpy < upperBound) {
+    lastSgnCpy = sgnCpy;
+    currentXCpy += algStep;
+    lastValueCpy = currentValueCpy;
+
+    currentValueCpy = Kernel::kernelConsensus(kernelPtr, dataSize, currentXCpy);
+    delta = currentValueCpy - lastValueCpy;
+    sgnCpy = signum(delta);
+
+    if (sgnCpy - lastSgnCpy > 0) {
+      arrSize++;
+    }
+  }
+
+  float maxRanges[arrSize];
+  unsigned int index = 0;
+
+  //Find the upper bound of all the mins
+  while (currentX < upperBound) {
+    lastSgn = sgn;
+    currentX += algStep;
+    lastValue = currentValue;
+
+    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+    delta = currentValue - lastValue;
+    sgn = signum(delta);
+
+    if (sgn - lastSgn > 0) {
+      maxRanges[index] = currentX;
+      index++;
+    }
+  }
+
+  boolean lastMidFloored = false;
+  float dividers[arrSize];
+  float flooredDividers[arrSize];
+  unsigned int usedVals = 0;
+  unsigned int usedFloorVals = 0;
+
+  //Refine the estimated mins
+  for (unsigned int i = 0; i < arrSize; i++) {
+    lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, maxRanges[i] - algStep);
+    float mid = (2 * maxRanges[i] - algStep) / 2;
+    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+    float lBound = maxRanges[i] - algStep;
+    float uBound = maxRanges[i];
+    while (abs(currentValue - lastValue) > lossThreshold) {
+      float rmid = (mid + uBound) / 2;
+      float lmid = (lBound + mid) / 2;
+
+      float rmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, rmid);
+      float lmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, lmid);
+
+      mid = rmidVal > lmidVal ? lmid : rmid;
+
+      lastValue = currentValue;
+      currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+    }
+    if (abs(currentValue - lastValue) == 0) {
+      flooredDividers[usedFloorVals] = mid;
+      usedFloorVals++;
+      lastMidFloored = true;
+    }
+    else if (lastMidFloored) {
+      dividers[usedVals] = (flooredDividers[usedFloorVals - 1] + mid) / 2;
+      usedVals++;
+      lastMidFloored = false;
+    }
+    else {
+      dividers[usedVals] = mid;
+      usedVals++;
+    }
+  }
+
+  if (usedVals < 32) {
+    for (int i = 0; i < usedVals; i++) {
+      output[i] = dividers[i];
+    }
+  }
+  else {
+    Serial.println("If you are reading this, everything has gone horribly wrong and you should give up. Good luck!");
+  }
+
+  return usedVals;
+}*/
+/*
+  void copy(long* src, long* dst, unsigned int len) {
   memcpy(dst, src, sizeof(src[0])*len);
-}
+  }
+  void copy(float* src, float* dst, unsigned int len) {
+  memcpy(dst, src, sizeof(src[0])*len);
+  }*/
