@@ -77,7 +77,15 @@ void loop() {
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
-    getAllData(timeData, &ampData[0], dataSize);
+    getAllData(timeData, ampData, dataSize);
+
+    float data[] = {0.0f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 0.7f, 0.7f, 1.0f, 2.0f, 2.1f, 2.1f, 2.5f, 2.5f, 2.5f, 2.7f, 2.7f, 3.0f};
+
+    for(unsigned int i = 0;  i < dataSize; i++) {
+      Serial.print("amps: ");
+      ampData[i] = data[i];
+      Serial.println(ampData[i]);
+    }
 
     kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
 
@@ -85,12 +93,12 @@ void loop() {
       kernels[i] = *(new Kernel(ampData[i], H));
     }
 
+    findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
-    for(unsigned int i = 0;  i< dataSize; i++) {
-      Serial.print("time: ");
-      Serial.println(timeData[i]);
+    for(unsigned int i = 0;  i < minsSize; i++) {
+      Serial.print("divider: ");
+      Serial.println(mins[i]);
     }
-    //findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
     state = OPERATE;
   }
@@ -163,23 +171,23 @@ bool readVals(long* v1, float* v2) {
   return str != ptr;  // true if number found
 }
 
-/*void findMin(Kernel *kernels, float *mins, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
+void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
   float currentX = lowerBound;
   float lastValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
   currentX += algStep / 2;
-  float currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+  float currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
   float delta = currentValue - lastValue;
 
   while (delta == 0.0) {
     currentX += algStep;
     lastValue = currentValue;
-    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+    currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
     delta = currentValue - lastValue;
   }
 
   currentX += algStep;
   lastValue = currentValue;
-  currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+  currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
   delta = currentValue - lastValue;
 
   int lastSgn = signum(delta);
@@ -199,7 +207,7 @@ bool readVals(long* v1, float* v2) {
     currentXCpy += algStep;
     lastValueCpy = currentValueCpy;
 
-    currentValueCpy = Kernel::kernelConsensus(kernelPtr, dataSize, currentXCpy);
+    currentValueCpy = Kernel::kernelConsensus(kernels, dataSize, currentXCpy);
     delta = currentValueCpy - lastValueCpy;
     sgnCpy = signum(delta);
 
@@ -217,7 +225,7 @@ bool readVals(long* v1, float* v2) {
     currentX += algStep;
     lastValue = currentValue;
 
-    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, currentX);
+    currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
     delta = currentValue - lastValue;
     sgn = signum(delta);
 
@@ -235,23 +243,24 @@ bool readVals(long* v1, float* v2) {
 
   //Refine the estimated mins
   for (unsigned int i = 0; i < arrSize; i++) {
-    lastValue = Kernel::kernelConsensus(kernelPtr, dataSize, maxRanges[i] - algStep);
+    lastValue = Kernel::kernelConsensus(kernels, dataSize, maxRanges[i] - algStep);
     float mid = (2 * maxRanges[i] - algStep) / 2;
-    currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+    currentValue = Kernel::kernelConsensus(kernels, dataSize, mid);
     float lBound = maxRanges[i] - algStep;
     float uBound = maxRanges[i];
     while (abs(currentValue - lastValue) > lossThreshold) {
       float rmid = (mid + uBound) / 2;
       float lmid = (lBound + mid) / 2;
 
-      float rmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, rmid);
-      float lmidVal = Kernel::kernelConsensus(kernelPtr, dataSize, lmid);
+      float rmidVal = Kernel::kernelConsensus(kernels, dataSize, rmid);
+      float lmidVal = Kernel::kernelConsensus(kernels, dataSize, lmid);
 
       mid = rmidVal > lmidVal ? lmid : rmid;
 
       lastValue = currentValue;
-      currentValue = Kernel::kernelConsensus(kernelPtr, dataSize, mid);
+      currentValue = Kernel::kernelConsensus(kernels, dataSize, mid);
     }
+    
     if (abs(currentValue - lastValue) == 0) {
       flooredDividers[usedFloorVals] = mid;
       usedFloorVals++;
@@ -268,17 +277,19 @@ bool readVals(long* v1, float* v2) {
     }
   }
 
-  if (usedVals < 32) {
-    for (int i = 0; i < usedVals; i++) {
-      output[i] = dividers[i];
-    }
-  }
-  else {
-    Serial.println("If you are reading this, everything has gone horribly wrong and you should give up. Good luck!");
-  }
 
-  return usedVals;
-}*/
+
+  mins = (float*) malloc(usedVals * sizeof(float));
+  minsSize = usedVals;
+  
+  for(unsigned int i = 0; i < usedVals; i++) {
+    mins[i] = dividers[i];
+  }
+}
+
+int signum(float val) {
+  return (0.0 < val) - (val < 0.0);
+}
 /*
   void copy(long* src, long* dst, unsigned int len) {
   memcpy(dst, src, sizeof(src[0])*len);

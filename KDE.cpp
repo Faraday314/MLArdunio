@@ -31,5 +31,5 @@ static float Kernel::kernelConsensus(Kernel *kernels, unsigned int listSize, flo
 			sum += kernels[i].calcValue(x);
 		}
 	}
-	return sum;
+	return sum/listSize;
 }
