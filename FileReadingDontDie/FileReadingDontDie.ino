@@ -1,25 +1,30 @@
 #include <SD.h>
 #include <KDE.h>
 
-#define MAX_NUMBER_OF_FILES 3
+//Amount of millisectonds to train for
+#define TRAINING_PERIOD 2*1000*60
+#define fPEM .1*60*1000
+#define MAX_NUMBER_OF_FILES floor(2/0.1)
+
 #define DATACOLLECT 0
 #define LEARN 1
 #define OPERATE 2
 #define RELEARN 3
-#define fPEM .1*60*1000
 #define H 0.5
 #define MAX_FLOAT_VAL 3.4028235e38
 #define MIN_FLOAT_VAL -MAX_FLOAT_VAL
 
 #define H 0.5
 
+#define AMP_PIN A3
+
 boolean allowWrite = true;
-unsigned int state = LEARN;
+unsigned int state = DATACOLLECT;
 int lastFile = 0;
 float lastTime = 0;
 File file;
-File myFile;
-File myFile2;
+
+long startTime;
 
 long *timeData;
 float *ampData;
@@ -37,39 +42,18 @@ void setup() {
     Serial.println("begin error");
     return;
   }
+  pinMode(AMP_PIN, INPUT);
+  startTime = millis();
 }
 void loop() {
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
     unsigned int times = fmod(floor(round(millis()) / fPEM), MAX_NUMBER_OF_FILES);
-    Serial.println(times);
-    if (allowWrite) {
-      //If anything is typed in the serial monitor stop writing
-      if (Serial.read() != -1) {
-        allowWrite = false;
+    if (millis() - startTime < TRAINING_PERIOD) {
+      bool fileExists = SD.exists("MS_" + String(times) + ".txt");
+      if (!fileExists) {
+        writeData("MS_" + String(times) + ".txt");
       }
-      if (lastFile != times) {
-        myFile.close();
-
-        lastFile = times;
-
-        if (SD.exists("ms_" + (String) times + ".txt")) {
-          SD.remove("ms_" + (String) times + ".txt");
-        }
-
-        myFile = SD.open("ms_" + (String) times + ".txt", FILE_WRITE);
-      }
-      else {
-        if (myFile) {
-          Serial.println("Wrote to file");
-          myFile.println("time = " + (String) round(millis()));
-        } else {
-          Serial.println((String) "error opening " + (String) "mills: " + (String) times + (String) ".txt");
-        }
-      }
-    }
-    else {
-      myFile.close();
     }
   }
   else if (state == LEARN) {
@@ -81,7 +65,7 @@ void loop() {
 
     float data[] = {0.0f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 0.7f, 0.7f, 1.0f, 2.0f, 2.1f, 2.1f, 2.5f, 2.5f, 2.5f, 2.7f, 2.7f, 3.0f};
 
-    for(unsigned int i = 0;  i < dataSize; i++) {
+    for (unsigned int i = 0;  i < dataSize; i++) {
       Serial.print("amps: ");
       ampData[i] = data[i];
       Serial.println(ampData[i]);
@@ -95,7 +79,7 @@ void loop() {
 
     findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
-    for(unsigned int i = 0;  i < minsSize; i++) {
+    for (unsigned int i = 0;  i < minsSize; i++) {
       Serial.print("divider: ");
       Serial.println(mins[i]);
     }
@@ -128,14 +112,14 @@ unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
 
   for (int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    myFile2 = SD.open("MS_" + String(i) + ".txt", FILE_READ);
-    if (myFile2) {
-      while (myFile2.available()) {
-        if (myFile2.read() == ',') {
+    File dataFile = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+    if (dataFile) {
+      while (dataFile.available()) {
+        if (dataFile.read() == ',') {
           numDataPoints++;
         }
       }
-      myFile2.close();
+      dataFile.close();
     }
     else {
       Serial.println("error opening MS_" + (String) i + ".txt");
@@ -260,7 +244,7 @@ void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upp
       lastValue = currentValue;
       currentValue = Kernel::kernelConsensus(kernels, dataSize, mid);
     }
-    
+
     if (abs(currentValue - lastValue) == 0) {
       flooredDividers[usedFloorVals] = mid;
       usedFloorVals++;
@@ -277,23 +261,56 @@ void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upp
     }
   }
 
-
-
   mins = (float*) malloc(usedVals * sizeof(float));
   minsSize = usedVals;
-  
-  for(unsigned int i = 0; i < usedVals; i++) {
+
+  for (unsigned int i = 0; i < usedVals; i++) {
     mins[i] = dividers[i];
+  }
+}
+
+bool writeData(String fileName) {
+
+  int amps;
+  const float varVolt = .00583;
+  const float varProccess = 5e-6;
+  float Pc = 0;
+  float G = 0;
+  float P = 1;
+  float Xp = 0;
+  float Zp = 0;
+  float Xe = 0;
+  for (int i = 0; i < 50; i++) {
+    amps = abs(511.5 - analogRead(AMP_PIN));
+
+    Pc = P + varProccess;
+    G = Pc / (Pc + varVolt);
+    P = (1 - G) * Pc;
+    Xp = Xe;
+    Zp = Xp;
+    Xe = G * (amps - Zp) + Xp;
+  }
+
+  File writeFile;
+  if (digitalRead(10) == HIGH) {
+    writeFile = SD.open(fileName, FILE_WRITE);
+  }
+  else {
+    return false;
+  }
+
+  // if the file opened okay, write to it:
+  if (writeFile) {
+    writeFile.println(String(millis()) + "," + String(Xe));
+    // close the file:
+    writeFile.close();
+    return true;
+  } else {
+    writeFile.close();
+    return false;
   }
 }
 
 int signum(float val) {
   return (0.0 < val) - (val < 0.0);
 }
-/*
-  void copy(long* src, long* dst, unsigned int len) {
-  memcpy(dst, src, sizeof(src[0])*len);
-  }
-  void copy(float* src, float* dst, unsigned int len) {
-  memcpy(dst, src, sizeof(src[0])*len);
-  }*/
