@@ -3,8 +3,8 @@
 
 //Amount of millisectonds to train for
 #define TRAINING_PERIOD 2*1000*60
-#define fPEM .1*60*1000
-#define MAX_NUMBER_OF_FILES floor(2/0.1)
+#define fPEM (1/3.0)*60*1000
+#define MAX_NUMBER_OF_FILES floor(2/(1.0/3))
 
 #define DATACOLLECT 0
 #define LEARN 1
@@ -43,17 +43,35 @@ void setup() {
     return;
   }
   pinMode(AMP_PIN, INPUT);
+  pinMode(8, OUTPUT);
+  digitalWrite(8, HIGH);
+  for(unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    SD.remove("MS_"+String(i)+".txt");
+  }
   startTime = millis();
 }
 void loop() {
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
-    unsigned int times = fmod(floor(round(millis()) / fPEM), MAX_NUMBER_OF_FILES);
+    unsigned int times = fmod(floor((millis() - startTime) / fPEM), MAX_NUMBER_OF_FILES);
+    Serial.println(millis()-startTime);
     if (millis() - startTime < TRAINING_PERIOD) {
       bool fileExists = SD.exists("MS_" + String(times) + ".txt");
       if (!fileExists) {
         writeData("MS_" + String(times) + ".txt");
       }
+    }
+    else {
+      state = LEARN;
+    }
+  }
+  else if(state == OPERATE) {
+    float val = Kernel::kernelConsensus(kernels, dataSize, getAmps());
+    if(val > mins[0]) {
+      Serial.println("On");
+    }
+    else {
+      Serial.println("Off");
     }
   }
   else if (state == LEARN) {
@@ -271,7 +289,7 @@ void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upp
 
 bool writeData(String fileName) {
 
-  int amps;
+  float amps;
   const float varVolt = .00583;
   const float varProccess = 5e-6;
   float Pc = 0;
@@ -281,7 +299,7 @@ bool writeData(String fileName) {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    amps = abs(511.5 - analogRead(AMP_PIN));
+    amps = getAmps();
 
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
@@ -309,6 +327,10 @@ bool writeData(String fileName) {
     writeFile.close();
     return false;
   }
+}
+
+float getAmps() {
+  return abs(511.5 - analogRead(AMP_PIN));
 }
 
 int signum(float val) {
