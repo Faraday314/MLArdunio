@@ -2,9 +2,7 @@
 #include <KDE.h>
 
 //Amount of millisectonds to train for
-#define TRAINING_PERIOD 2*1000*60
-#define fPEM (1/3.0)*60*1000
-#define MAX_NUMBER_OF_FILES floor(2/(1.0/3))
+
 
 #define DATACOLLECT 0
 #define LEARN 1
@@ -17,6 +15,13 @@
 #define H 0.5
 
 #define AMP_PIN A3
+
+const float TRAINING_PERIOD_MINS = 1.0;
+const float fPEM_MINS = 1/3.0;
+const float TRAINING_PERIOD = TRAINING_PERIOD_MINS*1000*60;
+const float fPEM = fPEM_MINS*60*1000;
+
+const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS/fPEM_MINS);
 
 boolean allowWrite = true;
 unsigned int state = DATACOLLECT;
@@ -53,13 +58,14 @@ void setup() {
 void loop() {
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
-    unsigned int times = fmod(floor((millis() - startTime) / fPEM), MAX_NUMBER_OF_FILES);
-    Serial.println(millis()-startTime);
+    unsigned int times = fmod((millis() - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
+    Serial.print("delta T: ");
+    Serial.println(millis() - startTime);
+    Serial.print("lim: ");
+    Serial.println(TRAINING_PERIOD);
     if (millis() - startTime < TRAINING_PERIOD) {
       bool fileExists = SD.exists("MS_" + String(times) + ".txt");
-      if (!fileExists) {
-        writeData("MS_" + String(times) + ".txt");
-      }
+      writeData("MS_" + String(times) + ".txt");
     }
     else {
       state = LEARN;
@@ -81,11 +87,8 @@ void loop() {
     timeData = (long*) malloc(dataSize * sizeof(long));
     getAllData(timeData, ampData, dataSize);
 
-    float data[] = {0.0f, 0.1f, 0.1f, 0.5f, 0.5f, 0.5f, 0.7f, 0.7f, 1.0f, 2.0f, 2.1f, 2.1f, 2.5f, 2.5f, 2.5f, 2.7f, 2.7f, 3.0f};
-
     for (unsigned int i = 0;  i < dataSize; i++) {
       Serial.print("amps: ");
-      ampData[i] = data[i];
       Serial.println(ampData[i]);
     }
 
@@ -308,7 +311,7 @@ bool writeData(String fileName) {
     Zp = Xp;
     Xe = G * (amps - Zp) + Xp;
   }
-
+  
   File writeFile;
   if (digitalRead(10) == HIGH) {
     writeFile = SD.open(fileName, FILE_WRITE);
