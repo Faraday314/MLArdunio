@@ -16,15 +16,15 @@
 
 #define AMP_PIN A3
 
-const float TRAINING_PERIOD_MINS = 1.0;
-const float fPEM_MINS = 1/3.0;
-const float TRAINING_PERIOD = TRAINING_PERIOD_MINS*1000*60;
-const float fPEM = fPEM_MINS*60*1000;
+const float TRAINING_PERIOD_MINS = 0.5;
+const float fPEM_MINS = 1 / 6.0;
+const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
+const float fPEM = fPEM_MINS * 60 * 1000;
 
-const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS/fPEM_MINS);
+const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS / fPEM_MINS);
 
 boolean allowWrite = true;
-unsigned int state = DATACOLLECT;
+unsigned int state;
 int lastFile = 0;
 float lastTime = 0;
 File file;
@@ -40,6 +40,9 @@ float *mins;
 unsigned int dataSize;
 unsigned int minsSize;
 
+String data;
+unsigned int lastTimes;
+
 void setup() {
 
   Serial.begin(9600);
@@ -50,30 +53,45 @@ void setup() {
   pinMode(AMP_PIN, INPUT);
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
-  for(unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    SD.remove("MS_"+String(i)+".txt");
+  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    SD.remove("MS_" + String(i) + ".txt");
   }
+  data = "";
+  lastTimes = 0;
   startTime = millis();
+  state = DATACOLLECT;
 }
 void loop() {
+
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
     unsigned int times = fmod((millis() - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
     Serial.print("delta T: ");
-    Serial.println(millis() - startTime);
+    Serial.print(millis() - startTime);
+    Serial.print(", ");
     Serial.print("lim: ");
     Serial.println(TRAINING_PERIOD);
     if (millis() - startTime < TRAINING_PERIOD) {
-      bool fileExists = SD.exists("MS_" + String(times) + ".txt");
-      writeData("MS_" + String(times) + ".txt");
+      data = data + String(millis()) + ", "+ String(getAmps())+'\n';
+      if(times != lastTimes) {
+         writeData("MS_" + String(times-1) + ".txt", data);
+         data = "";
+         lastTimes = times;
+         Serial.print("file: ");
+         Serial.println(times-1);
+      }     
     }
     else {
+      writeData("MS_" + String(times) + ".txt", data);
+      data = "";
+      Serial.print("file: ");
+      Serial.println(times);
       state = LEARN;
     }
   }
-  else if(state == OPERATE) {
+  else if (state == OPERATE) {
     float val = Kernel::kernelConsensus(kernels, dataSize, getAmps());
-    if(val > mins[0]) {
+    if (val > mins[0]) {
       Serial.println("On");
     }
     else {
@@ -85,6 +103,7 @@ void loop() {
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
+
     getAllData(timeData, ampData, dataSize);
 
     for (unsigned int i = 0;  i < dataSize; i++) {
@@ -114,12 +133,14 @@ void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
   for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
     file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+
     if (!file) {
       Serial.println("open error");
       return;
     }
     long x;
     float y;
+
     while (readVals(&x, &y)) {
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
@@ -290,30 +311,10 @@ void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upp
   }
 }
 
-bool writeData(String fileName) {
+bool writeData(String fileName, String data) {
 
-  float amps;
-  const float varVolt = .00583;
-  const float varProccess = 5e-6;
-  float Pc = 0;
-  float G = 0;
-  float P = 1;
-  float Xp = 0;
-  float Zp = 0;
-  float Xe = 0;
-  for (int i = 0; i < 50; i++) {
-    amps = getAmps();
-
-    Pc = P + varProccess;
-    G = Pc / (Pc + varVolt);
-    P = (1 - G) * Pc;
-    Xp = Xe;
-    Zp = Xp;
-    Xe = G * (amps - Zp) + Xp;
-  }
-  
   File writeFile;
-  if (digitalRead(10) == HIGH) {
+  if (true) {
     writeFile = SD.open(fileName, FILE_WRITE);
   }
   else {
@@ -322,7 +323,7 @@ bool writeData(String fileName) {
 
   // if the file opened okay, write to it:
   if (writeFile) {
-    writeFile.println(String(millis()) + "," + String(Xe));
+    writeFile.print(data);
     // close the file:
     writeFile.close();
     return true;
@@ -333,7 +334,27 @@ bool writeData(String fileName) {
 }
 
 float getAmps() {
-  return abs(511.5 - analogRead(AMP_PIN));
+  float amps;
+  const float varVolt = .00583;
+  const float varProccess = 5e-6;
+  float Pc = 0;
+  float G = 0;
+  float P = 1;
+  float Xp = 0;
+  float Zp = 0;
+  float Xe = 0;
+  for (int i = 0; i < 50; i++) {
+    amps = abs(511.5 - analogRead(AMP_PIN));
+
+    Pc = P + varProccess;
+    G = Pc / (Pc + varVolt);
+    P = (1 - G) * Pc;
+    Xp = Xe;
+    Zp = Xp;
+    Xe = G * (amps - Zp) + Xp;
+  }
+
+  return amps;
 }
 
 int signum(float val) {
