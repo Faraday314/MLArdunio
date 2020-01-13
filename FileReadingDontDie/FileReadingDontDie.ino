@@ -88,7 +88,7 @@ void loop() {
          Serial.print("file: ");
          Serial.println(times-1);
       }
-      else if(!SD.exists("MS_" + String(times) + ".txt")){
+      else {
         writeData("MS_" + String(times) + ".txt", data);
       }
     }
