@@ -65,27 +65,38 @@ void loop() {
 
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
-    unsigned int times = fmod((millis() - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
+    long timeMs = millis();
+    unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
     Serial.print("delta T: ");
-    Serial.print(millis() - startTime);
+    Serial.print(timeMs - startTime);
     Serial.print(", ");
     Serial.print("lim: ");
     Serial.println(TRAINING_PERIOD);
-    if (millis() - startTime < TRAINING_PERIOD) {
-      data = data + String(millis()) + ", "+ String(getAmps())+'\n';
+
+    if (timeMs - startTime < TRAINING_PERIOD) {
+      float amps = getAmps();
+      data = String(timeMs) + ","+ String(amps)+'\n';
+      
+      //Serial.println(data);
       if(times != lastTimes) {
+         data += '\0';
          writeData("MS_" + String(times-1) + ".txt", data);
+         Serial.println(data);
          data = "";
+         Serial.println("RESET");
          lastTimes = times;
          Serial.print("file: ");
          Serial.println(times-1);
-      }     
+      }
+      else if(!SD.exists("MS_" + String(times) + ".txt")){
+        writeData("MS_" + String(times) + ".txt", data);
+      }
     }
     else {
-      writeData("MS_" + String(times) + ".txt", data);
+      writeData("MS_" + String(MAX_NUMBER_OF_FILES-1) + ".txt", data);
       data = "";
       Serial.print("file: ");
-      Serial.println(times);
+      Serial.println(MAX_NUMBER_OF_FILES-1);
       state = LEARN;
     }
   }
@@ -313,6 +324,8 @@ void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upp
 
 bool writeData(String fileName, String data) {
 
+  Serial.println("WHABAM");
+
   File writeFile;
   if (true) {
     writeFile = SD.open(fileName, FILE_WRITE);
@@ -344,7 +357,9 @@ float getAmps() {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    amps = abs(511.5 - analogRead(AMP_PIN));
+    float vOut = (analogRead(AMP_PIN)/1023)*5000;
+    float current = (vOut);
+    amps = abs(current);
 
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
@@ -354,7 +369,7 @@ float getAmps() {
     Xe = G * (amps - Zp) + Xp;
   }
 
-  return amps;
+  return Xe;
 }
 
 int signum(float val) {
