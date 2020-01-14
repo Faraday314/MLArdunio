@@ -66,6 +66,8 @@ void loop() {
   //Datacollect state is WIP
   if (state == DATACOLLECT) {
     long timeMs = millis();
+    float amps = getAmps();
+
     unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
     Serial.print("delta T: ");
     Serial.print(timeMs - startTime);
@@ -74,12 +76,11 @@ void loop() {
     Serial.println(TRAINING_PERIOD);
 
     if (timeMs - startTime < TRAINING_PERIOD) {
-      float amps = getAmps();
-      data = String(timeMs) + ","+ String(amps)+'\n';
+      data = String(timeMs-startTime) + ","+ String(amps)+'\n';
       
       //Serial.println(data);
       if(times != lastTimes) {
-         data += '\0';
+         data = String(timeMs-startTime) + ","+ String(amps);
          writeData("MS_" + String(times-1) + ".txt", data);
          Serial.println(data);
          data = "";
@@ -93,6 +94,7 @@ void loop() {
       }
     }
     else {
+      data = String(timeMs-startTime) + ","+ String(amps);
       writeData("MS_" + String(MAX_NUMBER_OF_FILES-1) + ".txt", data);
       data = "";
       Serial.print("file: ");
@@ -111,6 +113,8 @@ void loop() {
   }
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
+
+    Serial.println(dataSize);
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
@@ -145,19 +149,31 @@ void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
 
     file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
 
+    Serial.println(String(i));
+    delay(1000);
+    long BAD = file.available(); //:(
+
     if (!file) {
-      Serial.println("open error");
+      Serial.println("open error opening file MS_" + String(i) + ".txt");
+      delay(10000000900);
       return;
     }
     long x;
     float y;
 
     while (readVals(&x, &y)) {
+      Serial.print("time: ");
+      Serial.println(x);
+      Serial.print("amps: ");
+      Serial.println(y);
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
       tracker++;
     }
     file.close();
+    if(BAD) {
+      BAD++;    
+    }
   }
 }
 
@@ -197,10 +213,14 @@ bool readLine(File &f, char* line, size_t maxLen) {
 bool readVals(long* v1, float* v2) {
   char line[40], *ptr, *str;
   if (!readLine(file, line, sizeof(line))) {
+    Serial.println("EOF");
     return false;  // EOF or too long
   }
   *v1 = strtol(line, &ptr, 10);
+  Serial.println(*v1);
+
   if (ptr == line) return false;  // bad number if equal
+
   while (*ptr) {
     if (*ptr++ == ',') break;
   }
