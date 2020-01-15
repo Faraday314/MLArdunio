@@ -1,4 +1,5 @@
 #include <SD.h>
+#include <SdFat.h>
 #include <KDE.h>
 
 //Amount of millisectonds to train for
@@ -43,13 +44,17 @@ unsigned int minsSize;
 String data;
 unsigned int lastTimes;
 
+SdFat sd;
+
 void setup() {
 
   Serial.begin(9600);
+  if (!sd.begin(4, SPI_HALF_SPEED)) sd.initErrorHalt();
   if (!SD.begin(4)) {
     Serial.println("begin error");
     return;
   }
+  
   pinMode(AMP_PIN, INPUT);
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
@@ -76,29 +81,29 @@ void loop() {
     Serial.println(TRAINING_PERIOD);
 
     if (timeMs - startTime < TRAINING_PERIOD) {
-      data = String(timeMs-startTime) + ","+ String(amps)+'\n';
-      
+      data = String(timeMs - startTime) + "," + String(amps) + '\r' + '\n';
+
       //Serial.println(data);
-      if(times != lastTimes) {
-         data = String(timeMs-startTime) + ","+ String(amps);
-         writeData("MS_" + String(times-1) + ".txt", data);
-         Serial.println(data);
-         data = "";
-         Serial.println("RESET");
-         lastTimes = times;
-         Serial.print("file: ");
-         Serial.println(times-1);
+      if (times != lastTimes) {
+        data = String(timeMs - startTime) + "," + String(amps) + '\0';
+        writeData("MS_" + String(times - 1) + ".txt", data);
+        Serial.println(data);
+        data = "";
+        Serial.println("RESET");
+        lastTimes = times;
+        Serial.print("file: ");
+        Serial.println(times - 1);
       }
       else {
         writeData("MS_" + String(times) + ".txt", data);
       }
     }
     else {
-      data = String(timeMs-startTime) + ","+ String(amps);
-      writeData("MS_" + String(MAX_NUMBER_OF_FILES-1) + ".txt", data);
+      data = String(timeMs - startTime) + "," + String(amps) + '\0';
+      writeData("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data);
       data = "";
       Serial.print("file: ");
-      Serial.println(MAX_NUMBER_OF_FILES-1);
+      Serial.println(MAX_NUMBER_OF_FILES - 1);
       state = LEARN;
     }
   }
@@ -114,32 +119,56 @@ void loop() {
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
 
-    Serial.println(dataSize);
+    char line[25];
+    int n;
+    // open test file
+    char *filename = "MS_0.txt";
+    SdFile file(filename, O_READ);
 
-    ampData = (float*) malloc(dataSize * sizeof(float));
-    timeData = (long*) malloc(dataSize * sizeof(long));
+    // check for open error
+    if (!file.isOpen()) {
+      error("demoFgets");
+    }
+    // read lines from the file
+    while ((n = file.fgets(line, sizeof(line))) > 0) {
+      if (line[n - 1] == '\n') {
+        // remove '\n'
+        line[n - 1] = 0;
+        // replace next line with LCD call to display line
+        Serial.println(line);
+      } else {
+        // no '\n' - line too long or missing '\n' at EOF
+        // handle error
+      }
+    }
 
-    getAllData(timeData, ampData, dataSize);
+    /*Serial.println(dataSize);
 
-    for (unsigned int i = 0;  i < dataSize; i++) {
+      ampData = (float*) malloc(dataSize * sizeof(float));
+      timeData = (long*) malloc(dataSize * sizeof(long));
+
+      getAllData(timeData, ampData, dataSize);
+
+      for (unsigned int i = 0;  i < dataSize; i++) {
       Serial.print("amps: ");
       Serial.println(ampData[i]);
-    }
+      }
 
-    kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
+      kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
 
-    for (unsigned int i = 0; i < dataSize; i++) {
+      for (unsigned int i = 0; i < dataSize; i++) {
       kernels[i] = *(new Kernel(ampData[i], H));
-    }
+      }
 
-    findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
+      findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
-    for (unsigned int i = 0;  i < minsSize; i++) {
+      for (unsigned int i = 0;  i < minsSize; i++) {
       Serial.print("divider: ");
       Serial.println(mins[i]);
-    }
+      }
 
-    state = OPERATE;
+      state = OPERATE;*/
+    state = 255;
   }
 }
 
@@ -151,7 +180,6 @@ void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
 
     Serial.println(String(i));
     delay(1000);
-    long BAD = file.available(); //:(
 
     if (!file) {
       Serial.println("open error opening file MS_" + String(i) + ".txt");
@@ -162,21 +190,18 @@ void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
     float y;
 
     while (readVals(&x, &y)) {
-      Serial.print("time: ");
-      Serial.println(x);
-      Serial.print("amps: ");
-      Serial.println(y);
+      /*Serial.print("time: ");
+        Serial.println(x);
+        Serial.print("amps: ");
+        Serial.println(y);*/
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
       tracker++;
     }
     file.close();
-    if(BAD) {
-      BAD++;    
-    }
+
   }
 }
-
 unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
 
@@ -197,7 +222,7 @@ unsigned int getNumDataPoints() {
   return numDataPoints;
 }
 
-bool readLine(File &f, char* line, size_t maxLen) {
+bool readLine(File & f, char* line, size_t maxLen) {
   for (size_t n = 0; n < maxLen; n++) {
     int c = f.read();
     if ( c < 0 && n == 0) return false;  // EOF
@@ -210,14 +235,13 @@ bool readLine(File &f, char* line, size_t maxLen) {
   return false; // line too long
 }
 
-bool readVals(long* v1, float* v2) {
+bool readVals(long * v1, float * v2) {
   char line[40], *ptr, *str;
   if (!readLine(file, line, sizeof(line))) {
     Serial.println("EOF");
     return false;  // EOF or too long
   }
   *v1 = strtol(line, &ptr, 10);
-  Serial.println(*v1);
 
   if (ptr == line) return false;  // bad number if equal
 
@@ -228,7 +252,7 @@ bool readVals(long* v1, float* v2) {
   return str != ptr;  // true if number found
 }
 
-void findMin(Kernel *kernels, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
+void findMin(Kernel * kernels, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
   float currentX = lowerBound;
   float lastValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
   currentX += algStep / 2;
@@ -377,7 +401,7 @@ float getAmps() {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    float vOut = (analogRead(AMP_PIN)/1023)*5000;
+    float vOut = (analogRead(AMP_PIN) / 1023) * 5000;
     float current = (vOut);
     amps = abs(current);
 
