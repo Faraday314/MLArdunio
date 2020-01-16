@@ -29,6 +29,7 @@ unsigned int state;
 int lastFile = 0;
 float lastTime = 0;
 File file;
+File bam;
 
 long startTime;
 
@@ -44,27 +45,42 @@ unsigned int minsSize;
 String data;
 unsigned int lastTimes;
 
-SdFat sd;
+size_t readField(File* file, char* str, size_t size, char* delim) {
+  char ch;
+  size_t n = 0;
+  while ((n + 1) < size && file->read(&ch, 1) == 1) {
+    // Delete CR.
+    if (ch == '\r') {
+      continue;
+    }
+    str[n++] = ch;
+    if (strchr(delim, ch)) {
+      break;
+    }
+  }
+  str[n] = '\0';
+  return n;
+}
+//------------------------------------------------------------------------------
+#define errorHalt(msg) {Serial.println(F(msg)); while(1);}
 
 void setup() {
-
   Serial.begin(9600);
-  if (!sd.begin(4, SPI_HALF_SPEED)) sd.initErrorHalt();
   if (!SD.begin(4)) {
     Serial.println("begin error");
     return;
   }
-  
+
   pinMode(AMP_PIN, INPUT);
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
-  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  /*for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     SD.remove("MS_" + String(i) + ".txt");
-  }
+    }*/
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = DATACOLLECT;
+  state = LEARN;
 }
 void loop() {
 
@@ -119,29 +135,37 @@ void loop() {
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
 
-    char line[25];
-    int n;
-    // open test file
-    char *filename = "MS_0.txt";
-    SdFile file(filename, O_READ);
+    Serial.println("ran");
 
-    // check for open error
-    if (!file.isOpen()) {
-      error("demoFgets");
-    }
-    // read lines from the file
-    while ((n = file.fgets(line, sizeof(line))) > 0) {
-      if (line[n - 1] == '\n') {
-        // remove '\n'
-        line[n - 1] = 0;
-        // replace next line with LCD call to display line
-        Serial.println(line);
+    bam = SD.open("MS_0.TXT", FILE_WRITE);
+    if (!file) errorHalt("open failed");
+
+    file.seek(0);
+
+    size_t n;      // Length of returned field with delimiter.
+    char str[20];  // Must hold longest field with delimiter and zero byte.
+
+    // Read the file and print fields.
+    while (true) {
+      n = readField(&file, str, sizeof(str), ",\n");
+
+      // done if Error or at EOF.
+      if (n == 0) break;
+
+      // Print the type of delimiter.
+      if (str[n - 1] == ',' || str[n - 1] == '\n') {
+        Serial.print(str[n - 1] == ',' ? F("comma: ") : F("endl:  "));
+
+        // Remove the delimiter.
+        str[n - 1] = 0;
       } else {
-        // no '\n' - line too long or missing '\n' at EOF
-        // handle error
+        // At eof, too long, or read error.  Too long is error.
+        Serial.print(file.available() ? F("error: ") : F("eof:   "));
       }
+      // Print the field.
+      Serial.println(str);
     }
-
+    file.close();
     /*Serial.println(dataSize);
 
       ampData = (float*) malloc(dataSize * sizeof(float));
@@ -172,7 +196,7 @@ void loop() {
   }
 }
 
-void getAllData(long *timeOutput, float *ampOutput, unsigned int listSize) {
+void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
   unsigned int tracker = 0;
   for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
