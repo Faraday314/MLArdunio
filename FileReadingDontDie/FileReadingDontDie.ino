@@ -1,5 +1,4 @@
 #include <SD.h>
-#include <SdFat.h>
 #include <KDE.h>
 
 //Amount of millisectonds to train for
@@ -62,7 +61,6 @@ size_t readField(File* file, char* str, size_t size, char* delim) {
   return n;
 }
 //------------------------------------------------------------------------------
-#define errorHalt(msg) {Serial.println(F(msg)); while(1);}
 
 void setup() {
   Serial.begin(9600);
@@ -135,63 +133,32 @@ void loop() {
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
 
-    Serial.println("ran");
 
-    bam = SD.open("MS_0.TXT", FILE_WRITE);
-    if (!file) errorHalt("open failed");
+    Serial.println(dataSize);
 
-    file.seek(0);
+    ampData = (float*) malloc(dataSize * sizeof(float));
+    timeData = (long*) malloc(dataSize * sizeof(long));
 
-    size_t n;      // Length of returned field with delimiter.
-    char str[20];  // Must hold longest field with delimiter and zero byte.
+    getAllData(timeData, ampData, dataSize);
 
-    // Read the file and print fields.
-    while (true) {
-      n = readField(&file, str, sizeof(str), ",\n");
-
-      // done if Error or at EOF.
-      if (n == 0) break;
-
-      // Print the type of delimiter.
-      if (str[n - 1] == ',' || str[n - 1] == '\n') {
-        Serial.print(str[n - 1] == ',' ? F("comma: ") : F("endl:  "));
-
-        // Remove the delimiter.
-        str[n - 1] = 0;
-      } else {
-        // At eof, too long, or read error.  Too long is error.
-        Serial.print(file.available() ? F("error: ") : F("eof:   "));
-      }
-      // Print the field.
-      Serial.println(str);
-    }
-    file.close();
-    /*Serial.println(dataSize);
-
-      ampData = (float*) malloc(dataSize * sizeof(float));
-      timeData = (long*) malloc(dataSize * sizeof(long));
-
-      getAllData(timeData, ampData, dataSize);
-
-      for (unsigned int i = 0;  i < dataSize; i++) {
+    for (unsigned int i = 0;  i < dataSize; i++) {
       Serial.print("amps: ");
       Serial.println(ampData[i]);
-      }
+    }
 
-      kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
+    kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
 
-      for (unsigned int i = 0; i < dataSize; i++) {
+    for (unsigned int i = 0; i < dataSize; i++) {
       kernels[i] = *(new Kernel(ampData[i], H));
-      }
+    }
 
-      findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
+    findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
-      for (unsigned int i = 0;  i < minsSize; i++) {
+    for (unsigned int i = 0;  i < minsSize; i++) {
       Serial.print("divider: ");
       Serial.println(mins[i]);
-      }
+    }
 
-      state = OPERATE;*/
     state = 255;
   }
 }
@@ -200,14 +167,13 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
   unsigned int tracker = 0;
   for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
-    file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+    String num = String(i);
 
-    Serial.println(String(i));
-    delay(1000);
+    file = SD.open("MS_" + num + ".txt", FILE_READ);
 
     if (!file) {
-      Serial.println("open error opening file MS_" + String(i) + ".txt");
-      delay(10000000900);
+      Serial.println("open error opening file MS_" + num + ".txt");
+      delay(1000);
       return;
     }
     long x;
@@ -220,6 +186,8 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
         Serial.println(y);*/
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
+      Serial.println(y);
+      delay(1000); 
       tracker++;
     }
     file.close();
@@ -249,24 +217,27 @@ unsigned int getNumDataPoints() {
 bool readLine(File & f, char* line, size_t maxLen) {
   for (size_t n = 0; n < maxLen; n++) {
     int c = f.read();
-    if ( c < 0 && n == 0) return false;  // EOF
+    if ( c < 0 && n == 0) {
+      Serial.println("EOF");
+      return false;  // EOF
+    }
     if (c < 0 || c == '\n') {
       line[n] = 0;
       return true;
     }
     line[n] = c;
   }
+  Serial.println("too long");
   return false; // line too long
 }
 
 bool readVals(long * v1, float * v2) {
   char line[40], *ptr, *str;
   if (!readLine(file, line, sizeof(line))) {
-    Serial.println("EOF");
     return false;  // EOF or too long
   }
   *v1 = strtol(line, &ptr, 10);
-
+  
   if (ptr == line) return false;  // bad number if equal
 
   while (*ptr) {
