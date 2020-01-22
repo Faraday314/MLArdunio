@@ -186,7 +186,7 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
         Serial.println(y);*/
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
-      Serial.println(y);
+      //Serial.println(y);
       delay(1000); 
       tracker++;
     }
@@ -217,6 +217,7 @@ unsigned int getNumDataPoints() {
 bool readLine(File & f, char* line, size_t maxLen) {
   for (size_t n = 0; n < maxLen; n++) {
     int c = f.read();
+    Serial.println(String(c) + '\0');
     if ( c < 0 && n == 0) {
       Serial.println("EOF");
       return false;  // EOF
@@ -234,11 +235,22 @@ bool readLine(File & f, char* line, size_t maxLen) {
 bool readVals(long * v1, float * v2) {
   char line[40], *ptr, *str;
   if (!readLine(file, line, sizeof(line))) {
+    Serial.println("EOF/toolong");
     return false;  // EOF or too long
   }
+  ptr[39] = '\0';
+  line[39] = '\0';
+  //Serial.println(line);
+  delay(1000);
+
+ 
   *v1 = strtol(line, &ptr, 10);
+
   
-  if (ptr == line) return false;  // bad number if equal
+  if (ptr == line) {
+    Serial.println("bad number");
+    return false;  // bad number if equal
+  }
 
   while (*ptr) {
     if (*ptr++ == ',') break;
