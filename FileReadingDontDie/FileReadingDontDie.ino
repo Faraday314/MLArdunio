@@ -129,6 +129,7 @@ void loop() {
     else {
       Serial.println("Off");
     }
+    //death
   }
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
