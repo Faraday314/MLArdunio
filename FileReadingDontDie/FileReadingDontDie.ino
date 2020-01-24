@@ -44,24 +44,6 @@ unsigned int minsSize;
 String data;
 unsigned int lastTimes;
 
-size_t readField(File* file, char* str, size_t size, char* delim) {
-  char ch;
-  size_t n = 0;
-  while ((n + 1) < size && file->read(&ch, 1) == 1) {
-    // Delete CR.
-    if (ch == '\r') {
-      continue;
-    }
-    str[n++] = ch;
-    if (strchr(delim, ch)) {
-      break;
-    }
-  }
-  str[n] = '\0';
-  return n;
-}
-//------------------------------------------------------------------------------
-
 void setup() {
   Serial.begin(9600);
   if (!SD.begin(4)) {
@@ -72,13 +54,13 @@ void setup() {
   pinMode(AMP_PIN, INPUT);
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
-  /*for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     SD.remove("MS_" + String(i) + ".txt");
-    }*/
+  }
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = LEARN;
+  state = DATACOLLECT;
 }
 void loop() {
 
@@ -99,8 +81,8 @@ void loop() {
 
       //Serial.println(data);
       if (times != lastTimes) {
-        data = String(timeMs - startTime) + "," + String(amps) + '\0';
-        writeData("MS_" + String(times - 1) + ".txt", data);
+        data = String(timeMs - startTime) + "," + String(amps);
+        appendToFile("MS_" + String(times - 1) + ".txt", data);
         Serial.println(data);
         data = "";
         Serial.println("RESET");
@@ -109,12 +91,12 @@ void loop() {
         Serial.println(times - 1);
       }
       else {
-        writeData("MS_" + String(times) + ".txt", data);
+        appendToFile("MS_" + String(times) + ".txt", data);
       }
     }
     else {
-      data = String(timeMs - startTime) + "," + String(amps) + '\0';
-      writeData("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data);
+      data = String(timeMs - startTime) + "," + String(amps);
+      appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data);
       data = "";
       Serial.print("file: ");
       Serial.println(MAX_NUMBER_OF_FILES - 1);
@@ -129,13 +111,9 @@ void loop() {
     else {
       Serial.println("Off");
     }
-    //death
   }
   else if (state == LEARN) {
     dataSize = getNumDataPoints();
-
-
-    Serial.println(dataSize);
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
@@ -152,6 +130,7 @@ void loop() {
     for (unsigned int i = 0; i < dataSize; i++) {
       kernels[i] = *(new Kernel(ampData[i], H));
     }
+
 
     findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
 
@@ -181,14 +160,8 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
     float y;
 
     while (readVals(&x, &y)) {
-      /*Serial.print("time: ");
-        Serial.println(x);
-        Serial.print("amps: ");
-        Serial.println(y);*/
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
-      //Serial.println(y);
-      delay(1000); 
       tracker++;
     }
     file.close();
@@ -218,9 +191,7 @@ unsigned int getNumDataPoints() {
 bool readLine(File & f, char* line, size_t maxLen) {
   for (size_t n = 0; n < maxLen; n++) {
     int c = f.read();
-    Serial.println(String(c) + '\0');
     if ( c < 0 && n == 0) {
-      Serial.println("EOF");
       return false;  // EOF
     }
     if (c < 0 || c == '\n') {
@@ -229,25 +200,17 @@ bool readLine(File & f, char* line, size_t maxLen) {
     }
     line[n] = c;
   }
-  Serial.println("too long");
   return false; // line too long
 }
 
 bool readVals(long * v1, float * v2) {
   char line[40], *ptr, *str;
   if (!readLine(file, line, sizeof(line))) {
-    Serial.println("EOF/toolong");
     return false;  // EOF or too long
   }
-  ptr[39] = '\0';
-  line[39] = '\0';
-  //Serial.println(line);
-  delay(1000);
 
- 
   *v1 = strtol(line, &ptr, 10);
 
-  
   if (ptr == line) {
     Serial.println("bad number");
     return false;  // bad number if equal
@@ -374,30 +337,6 @@ void findMin(Kernel * kernels, unsigned int dataSize, float lowerBound, float up
   }
 }
 
-bool writeData(String fileName, String data) {
-
-  Serial.println("WHABAM");
-
-  File writeFile;
-  if (true) {
-    writeFile = SD.open(fileName, FILE_WRITE);
-  }
-  else {
-    return false;
-  }
-
-  // if the file opened okay, write to it:
-  if (writeFile) {
-    writeFile.print(data);
-    // close the file:
-    writeFile.close();
-    return true;
-  } else {
-    writeFile.close();
-    return false;
-  }
-}
-
 float getAmps() {
   float amps;
   const float varVolt = .00583;
@@ -409,9 +348,10 @@ float getAmps() {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    float vOut = (analogRead(AMP_PIN) / 1023) * 5000;
+    float vOut = (analogRead(AMP_PIN) / 1023.0) * 5000;
     float current = (vOut);
-    amps = abs(current);
+    float shift = 2500 - current;
+    amps = abs(shift);
 
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
@@ -422,6 +362,63 @@ float getAmps() {
   }
 
   return Xe;
+}
+
+bool appendToFile(String filePath, String data) {
+  File writeFile;
+  File readFile;
+
+  if (!SD.exists(filePath)) {
+    File temp;
+    temp = SD.open(filePath, FILE_WRITE);
+    temp.close();
+  }
+
+  readFile = SD.open(filePath, FILE_READ);
+  writeFile = SD.open("temp.txt", FILE_WRITE);
+  if (readFile && writeFile) {
+    readFile.seek(0);
+    writeFile.seek(0);
+    while (readFile.available()) {
+      char c;
+      c = readFile.read();
+      writeFile.write(c);
+    }
+    writeFile.print(data);
+    readFile.close();
+    writeFile.close();
+
+    SD.remove(filePath);
+    File copied;
+    File readIn;
+    copied = SD.open(filePath, FILE_WRITE);
+    readIn = SD.open("temp.txt", FILE_READ);
+
+    if (readIn && copied) {
+      readIn.seek(0);
+      copied.seek(0);
+      while (readIn.available()) {
+        char c2;
+        c2 = readIn.read();
+        copied.write(c2);
+      }
+      readIn.close();
+      copied.close();
+
+      SD.remove("temp.txt");
+      return true;
+    }
+    else {
+      readIn.close();
+      copied.close();
+      return false;
+    }
+  }
+  else {
+    readFile.close();
+    writeFile.close();
+    return false;
+  }
 }
 
 int signum(float val) {
