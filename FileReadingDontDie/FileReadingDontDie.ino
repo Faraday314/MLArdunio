@@ -8,7 +8,7 @@
 #define LEARN 1
 #define OPERATE 2
 #define RELEARN 3
-#define H 0.5
+#define H 5.5
 #define MAX_FLOAT_VAL 3.4028235e38
 #define MIN_FLOAT_VAL -MAX_FLOAT_VAL
 
@@ -54,13 +54,13 @@ void setup() {
   pinMode(AMP_PIN, INPUT);
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
-  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  /*for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     SD.remove("MS_" + String(i) + ".txt");
-  }
+  }*/
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = DATACOLLECT;
+  state = LEARN;
 }
 void loop() {
 
@@ -120,19 +120,37 @@ void loop() {
 
     getAllData(timeData, ampData, dataSize);
 
+    float maxAmps = 0;
     for (unsigned int i = 0;  i < dataSize; i++) {
-      Serial.print("amps: ");
-      Serial.println(ampData[i]);
+      float amp;
+      amp = ampData[i];
+      if(amp > maxAmps) {
+        maxAmps = amp;
+      }
+      Serial.print("max: ");
+      Serial.print(maxAmps);
+      Serial.print(" amps: ");
+      Serial.println(amp);
     }
+    Serial.println(dataSize);
+    delay(1000);
 
     kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
 
     for (unsigned int i = 0; i < dataSize; i++) {
-      kernels[i] = *(new Kernel(ampData[i], H));
+      Serial.println(i);
+      float ampDataPt;
+      ampDataPt = ampData[i];
+      Kernel k = Kernel(ampDataPt, H);
+      kernels[i] = k;
     }
 
 
-    findMin(kernels, dataSize, 0.0, 3.0, 0.1, 0.01);
+
+    findMin(kernels, dataSize, 0.0, maxAmps, 1, 0.5);
+
+
+    delay(1000);
 
     for (unsigned int i = 0;  i < minsSize; i++) {
       Serial.print("divider: ");
