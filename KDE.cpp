@@ -23,6 +23,10 @@ float Kernel::getU(float x) {
   return (x - datapoint)/h;
 }
 
+float Kernel::getH() {
+	return h;
+}
+
 static float Kernel::kernelConsensus(Kernel *kernels, unsigned int listSize, float x) {
 	
 	float sum = 0;

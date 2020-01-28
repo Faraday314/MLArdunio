@@ -12,11 +12,9 @@
 #define MAX_FLOAT_VAL 3.4028235e38
 #define MIN_FLOAT_VAL -MAX_FLOAT_VAL
 
-#define H 0.5
-
 #define AMP_PIN A3
 
-const float TRAINING_PERIOD_MINS = 0.5;
+const float TRAINING_PERIOD_MINS = 2;
 const float fPEM_MINS = 1 / 6.0;
 const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
 const float fPEM = fPEM_MINS * 60 * 1000;
@@ -104,8 +102,13 @@ void loop() {
     }
   }
   else if (state == OPERATE) {
-    float val = Kernel::kernelConsensus(kernels, dataSize, getAmps());
-    if (val > mins[0]) {
+    float amps;
+    amps = getAmps();
+    Serial.print("amps: ");
+    Serial.print(amps);
+    Serial.print(" state: ");
+    
+    if (amps > mins[0]) {
       Serial.println("On");
     }
     else {
@@ -113,18 +116,53 @@ void loop() {
     }
   }
   else if (state == LEARN) {
+   
     dataSize = getNumDataPoints();
+
+    //dataSize = 31;
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
 
+    /*ampData[0] = 10.36;
+      ampData[1] = 9.00;
+      ampData[2] = 8.41;
+      ampData[3] = 7.48;
+      ampData[4] = 8.85;
+      ampData[5] = 19.11;
+      ampData[6] = 17.88;
+      ampData[7] = 15.55;
+      ampData[8] = 15.19;
+      ampData[9] = 18.04;
+      ampData[10] = 6.23;
+      ampData[11] = 6.06;
+      ampData[12] = 8.08;
+      ampData[13] = 8.75;
+      ampData[14] = 6.64;
+      ampData[15] = 22.27;
+      ampData[16] = 19.25;
+      ampData[17] = 17.47;
+      ampData[18] = 17.88;
+      ampData[19] = 6.44;
+      ampData[20] = 7.98;
+      ampData[21] = 22.63;
+      ampData[22] = 18.68;
+      ampData[23] = 22.82;
+      ampData[24] = 19.73;
+      ampData[25] = 9.34;
+      ampData[26] = 7.76;
+      ampData[27] = 7.00;
+      ampData[28] = 18.25;
+      ampData[29] = 7.59;
+      ampData[30] = 6.56;*/
     getAllData(timeData, ampData, dataSize);
+
 
     float maxAmps = 0;
     for (unsigned int i = 0;  i < dataSize; i++) {
       float amp;
       amp = ampData[i];
-      if(amp > maxAmps) {
+      if (amp > maxAmps) {
         maxAmps = amp;
       }
       Serial.print("max: ");
@@ -132,32 +170,23 @@ void loop() {
       Serial.print(" amps: ");
       Serial.println(amp);
     }
-    Serial.println(dataSize);
     delay(1000);
 
     kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
 
     for (unsigned int i = 0; i < dataSize; i++) {
-      Serial.println(i);
       float ampDataPt;
       ampDataPt = ampData[i];
       Kernel k = Kernel(ampDataPt, H);
       kernels[i] = k;
     }
-
-
-
-    findMin(kernels, dataSize, 0.0, maxAmps, 1, 0.5);
-
-
-    delay(1000);
-
+    findMin(kernels, dataSize, 0.0, maxAmps, 0.1, 0.01);
     for (unsigned int i = 0;  i < minsSize; i++) {
       Serial.print("divider: ");
       Serial.println(mins[i]);
     }
 
-    state = 255;
+    state = OPERATE;
   }
 }
 
@@ -166,6 +195,8 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
   for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
     String num = String(i);
+
+            Serial.println("learning");
 
     file = SD.open("MS_" + num + ".txt", FILE_READ);
 

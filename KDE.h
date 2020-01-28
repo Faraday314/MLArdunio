@@ -14,6 +14,7 @@ class Kernel {
     Kernel(float datapoint_param, float h_param);
     float calcValue(float x);
     float getU(float x);
+	float getH();
 	static float kernelConsensus(Kernel *kernelPtr, unsigned int listSize, float x);
 };
 #endif
