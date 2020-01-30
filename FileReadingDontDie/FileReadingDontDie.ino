@@ -14,10 +14,11 @@
 
 #define AMP_PIN A3
 
-const float TRAINING_PERIOD_MINS = 2;
+const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
 const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
 const float fPEM = fPEM_MINS * 60 * 1000;
+
 
 const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS / fPEM_MINS);
 
@@ -25,8 +26,10 @@ boolean allowWrite = true;
 unsigned int state;
 int lastFile = 0;
 float lastTime = 0;
+boolean resetFileWrite = true;
 File file;
 File bam;
+File file2;
 
 long startTime;
 
@@ -58,7 +61,7 @@ void setup() {
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = LEARN;
+  state = DATACOLLECT;
 }
 void loop() {
 
@@ -80,7 +83,7 @@ void loop() {
       //Serial.println(data);
       if (times != lastTimes) {
         data = String(timeMs - startTime) + "," + String(amps);
-        appendToFile("MS_" + String(times - 1) + ".txt", data);
+        appendToFile("MS_" + String(times - 1) + ".txt", data, true);
         Serial.println(data);
         data = "";
         Serial.println("RESET");
@@ -89,12 +92,12 @@ void loop() {
         Serial.println(times - 1);
       }
       else {
-        appendToFile("MS_" + String(times) + ".txt", data);
+        appendToFile("MS_" + String(times) + ".txt", data, false);
       }
     }
     else {
       data = String(timeMs - startTime) + "," + String(amps);
-      appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data);
+      appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data, true);
       data = "";
       Serial.print("file: ");
       Serial.println(MAX_NUMBER_OF_FILES - 1);
@@ -165,10 +168,10 @@ void loop() {
       if (amp > maxAmps) {
         maxAmps = amp;
       }
-      Serial.print("max: ");
+      /*Serial.print("max: ");
       Serial.print(maxAmps);
       Serial.print(" amps: ");
-      Serial.println(amp);
+      Serial.println(amp);*/
     }
     delay(1000);
 
@@ -192,47 +195,40 @@ void loop() {
 
 void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
   unsigned int tracker = 0;
-  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  long x;
+  float y;
+  for (unsigned int i = 1; i < MAX_NUMBER_OF_FILES; i++) {
 
-    String num = String(i);
-
-            Serial.println("learning");
-
-    file = SD.open("MS_" + num + ".txt", FILE_READ);
+    file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
 
     if (!file) {
-      Serial.println("open error opening file MS_" + num + ".txt");
+      Serial.println("open error opening file MS_" + String(i) + ".txt");
       delay(1000);
       return;
     }
-    long x;
-    float y;
-
+    
     while (readVals(&x, &y)) {
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
       tracker++;
     }
-    file.close();
-
+    delay(1000);
   }
 }
 unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
 
-  for (int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+  for (int i = 1; i < MAX_NUMBER_OF_FILES; i++) {
     File dataFile = SD.open("MS_" + String(i) + ".txt", FILE_READ);
-    if (dataFile) {
-      while (dataFile.available()) {
+    if (!dataFile) {
+      Serial.println("error opening MS_" + String(i) + ".txt");
+      return;
+    }
+    while (dataFile.available()) {
         if (dataFile.read() == ',') {
           numDataPoints++;
         }
       }
-      dataFile.close();
-    }
-    else {
-      Serial.println("error opening MS_" + (String) i + ".txt");
-    }
   }
   return numDataPoints;
 }
@@ -413,60 +409,15 @@ float getAmps() {
   return Xe;
 }
 
-bool appendToFile(String filePath, String data) {
-  File writeFile;
-  File readFile;
-
-  if (!SD.exists(filePath)) {
-    File temp;
-    temp = SD.open(filePath, FILE_WRITE);
-    temp.close();
+void appendToFile(String filePath, String data, boolean closeFile) {
+  if(resetFileWrite) {
+    file2 = SD.open(filePath, FILE_WRITE);
+    resetFileWrite = false;
   }
-
-  readFile = SD.open(filePath, FILE_READ);
-  writeFile = SD.open("temp.txt", FILE_WRITE);
-  if (readFile && writeFile) {
-    readFile.seek(0);
-    writeFile.seek(0);
-    while (readFile.available()) {
-      char c;
-      c = readFile.read();
-      writeFile.write(c);
-    }
-    writeFile.print(data);
-    readFile.close();
-    writeFile.close();
-
-    SD.remove(filePath);
-    File copied;
-    File readIn;
-    copied = SD.open(filePath, FILE_WRITE);
-    readIn = SD.open("temp.txt", FILE_READ);
-
-    if (readIn && copied) {
-      readIn.seek(0);
-      copied.seek(0);
-      while (readIn.available()) {
-        char c2;
-        c2 = readIn.read();
-        copied.write(c2);
-      }
-      readIn.close();
-      copied.close();
-
-      SD.remove("temp.txt");
-      return true;
-    }
-    else {
-      readIn.close();
-      copied.close();
-      return false;
-    }
-  }
-  else {
-    readFile.close();
-    writeFile.close();
-    return false;
+  file2.print(data);
+  if(closeFile) {
+    file2.close();
+    resetFileWrite = true;
   }
 }
 
