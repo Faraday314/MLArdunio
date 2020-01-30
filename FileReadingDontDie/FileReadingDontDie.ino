@@ -61,7 +61,7 @@ void setup() {
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = DATACOLLECT;
+  state = LEARN;
 }
 void loop() {
 
@@ -159,7 +159,7 @@ void loop() {
       ampData[29] = 7.59;
       ampData[30] = 6.56;*/
     getAllData(timeData, ampData, dataSize);
-
+/*
 
     float maxAmps = 0;
     for (unsigned int i = 0;  i < dataSize; i++) {
@@ -168,10 +168,10 @@ void loop() {
       if (amp > maxAmps) {
         maxAmps = amp;
       }
-      /*Serial.print("max: ");
+      Serial.print("max: ");
       Serial.print(maxAmps);
       Serial.print(" amps: ");
-      Serial.println(amp);*/
+      Serial.println(amp);
     }
     delay(1000);
 
@@ -188,8 +188,8 @@ void loop() {
       Serial.print("divider: ");
       Serial.println(mins[i]);
     }
-
-    state = OPERATE;
+*/
+    state = 255;
   }
 }
 
@@ -197,7 +197,43 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
   unsigned int tracker = 0;
   long x;
   float y;
-  for (unsigned int i = 1; i < MAX_NUMBER_OF_FILES; i++) {
+
+  File f;
+  int test = 0;
+    f = SD.open("MS_0.txt", FILE_READ);
+    String timeDataPt;
+    String ampDataPt;
+    timeDataPt = "";
+    ampDataPt = "";
+    bool reachedComma = false;
+
+    while(f.available()) {
+      char c;
+      c = f.read();
+      Serial.println(c);
+      if(test == 6) {
+        int b = c;
+        Serial.println("ACK");
+        Serial.println(b);
+      }
+      test++;
+      if(c == ',' || reachedComma) {
+        reachedComma = true;
+        continue;
+      }
+      if(c == '\n' || c == '\r') {
+        reachedComma = false;
+        continue;
+      }
+      Serial.println("passed");
+    }
+    //Serial.println(timeDataPt);
+  
+  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+    
+/*
+    Serial.println(String(i) + '\0');
+    Serial.println(String(MAX_NUMBER_OF_FILES) + '\0');
 
     file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
 
@@ -206,19 +242,19 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
       delay(1000);
       return;
     }
-    
     while (readVals(&x, &y)) {
       timeOutput[tracker] = x;
       ampOutput[tracker] = y;
       tracker++;
     }
     delay(1000);
+    file.close();*/
   }
 }
 unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
 
-  for (int i = 1; i < MAX_NUMBER_OF_FILES; i++) {
+  for (int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     File dataFile = SD.open("MS_" + String(i) + ".txt", FILE_READ);
     if (!dataFile) {
       Serial.println("error opening MS_" + String(i) + ".txt");
@@ -229,14 +265,18 @@ unsigned int getNumDataPoints() {
           numDataPoints++;
         }
       }
+      dataFile.close();
   }
+  
   return numDataPoints;
 }
 
 bool readLine(File & f, char* line, size_t maxLen) {
   for (size_t n = 0; n < maxLen; n++) {
-    int c = f.read();
+    int c;
+    c = f.read();
     if ( c < 0 && n == 0) {
+      Serial.println("EOF");
       return false;  // EOF
     }
     if (c < 0 || c == '\n') {
