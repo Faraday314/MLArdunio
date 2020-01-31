@@ -45,6 +45,9 @@ unsigned int minsSize;
 String data;
 unsigned int lastTimes;
 
+float ampPt;
+
+
 void setup() {
   Serial.begin(9600);
   if (!SD.begin(4)) {
@@ -57,7 +60,7 @@ void setup() {
   digitalWrite(8, HIGH);
   /*for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
     SD.remove("MS_" + String(i) + ".txt");
-  }*/
+    }*/
   data = "";
   lastTimes = 0;
   startTime = millis();
@@ -110,7 +113,7 @@ void loop() {
     Serial.print("amps: ");
     Serial.print(amps);
     Serial.print(" state: ");
-    
+
     if (amps > mins[0]) {
       Serial.println("On");
     }
@@ -119,13 +122,66 @@ void loop() {
     }
   }
   else if (state == LEARN) {
-   
+
     dataSize = getNumDataPoints();
 
     //dataSize = 31;
 
     ampData = (float*) malloc(dataSize * sizeof(float));
     timeData = (long*) malloc(dataSize * sizeof(long));
+
+    unsigned int tracker;
+    unsigned int charTrackerTime;
+    unsigned int charTrackerAmps;
+    tracker = 0;
+    charTrackerTime = 0;
+    charTrackerAmps = 0;
+
+    File f;
+    f = SD.open("MS_0.txt", FILE_READ);
+    char timeDataPt[40];
+    char ampDataPt[40];
+    bool reachedComma = false;
+    char c;
+    while (c = f.read()) {
+      if (c < 0) {
+        reachedComma = false;
+        ampDataPt[charTrackerAmps] = '\0';
+        break;
+      }
+      if (c == '\n') {
+        reachedComma = false;
+        ampDataPt[charTrackerAmps] = '\0';
+        charTrackerAmps = 0;
+
+        ampPt = atof(ampDataPt);
+
+        //ampData[tracker] = ampPt;
+        tracker++;
+
+        continue;
+      }
+      else if (c == '\r') {
+        reachedComma = false;
+        continue;
+      }
+      else if (c == ',') {
+        reachedComma = true;
+        timeDataPt[charTrackerTime] = '\0';
+        charTrackerTime = 0;
+
+        continue;
+      }
+
+      if (reachedComma) {
+        ampDataPt[charTrackerAmps] = c;
+        charTrackerAmps++;
+      }
+      else  {
+        timeDataPt[charTrackerTime] = c;
+        charTrackerTime++;
+      }
+    }
 
     /*ampData[0] = 10.36;
       ampData[1] = 9.00;
@@ -158,97 +214,126 @@ void loop() {
       ampData[28] = 18.25;
       ampData[29] = 7.59;
       ampData[30] = 6.56;*/
-    getAllData(timeData, ampData, dataSize);
-/*
-
-    float maxAmps = 0;
-    for (unsigned int i = 0;  i < dataSize; i++) {
+    Serial.println(String(tracker) + '/0');
+    for (unsigned int i = 0;  i < 10; i++) {
       float amp;
       amp = ampData[i];
-      if (amp > maxAmps) {
-        maxAmps = amp;
-      }
-      Serial.print("max: ");
-      Serial.print(maxAmps);
-      Serial.print(" amps: ");
+
+      Serial.print("amps: ");
       Serial.println(amp);
     }
-    delay(1000);
+    //getAllData(timeData, ampData, dataSize);
+    /*
 
-    kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
+        float maxAmps = 0;
+        for (unsigned int i = 0;  i < dataSize; i++) {
+          float amp;
+          amp = ampData[i];
+          if (amp > maxAmps) {
+            maxAmps = amp;
+          }
+          Serial.print("max: ");
+          Serial.print(maxAmps);
+          Serial.print(" amps: ");
+          Serial.println(amp);
+        }
+        delay(1000);
 
-    for (unsigned int i = 0; i < dataSize; i++) {
-      float ampDataPt;
-      ampDataPt = ampData[i];
-      Kernel k = Kernel(ampDataPt, H);
-      kernels[i] = k;
-    }
-    findMin(kernels, dataSize, 0.0, maxAmps, 0.1, 0.01);
-    for (unsigned int i = 0;  i < minsSize; i++) {
-      Serial.print("divider: ");
-      Serial.println(mins[i]);
-    }
-*/
+        kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
+
+        for (unsigned int i = 0; i < dataSize; i++) {
+          float ampDataPt;
+          ampDataPt = ampData[i];
+          Kernel k = Kernel(ampDataPt, H);
+          kernels[i] = k;
+        }
+        findMin(kernels, dataSize, 0.0, maxAmps, 0.1, 0.01);
+        for (unsigned int i = 0;  i < minsSize; i++) {
+          Serial.print("divider: ");
+          Serial.println(mins[i]);
+        }
+    */
     state = 255;
   }
 }
 
 void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
-  unsigned int tracker = 0;
+  unsigned int tracker;
+  tracker = 0;
   long x;
   float y;
 
   File f;
-  int test = 0;
-    f = SD.open("MS_0.txt", FILE_READ);
-    String timeDataPt;
-    String ampDataPt;
-    timeDataPt = "";
-    ampDataPt = "";
-    bool reachedComma = false;
-
-    while(f.available()) {
-      char c;
-      c = f.read();
-      Serial.println(c);
-      if(test == 6) {
-        int b = c;
-        Serial.println("ACK");
-        Serial.println(b);
-      }
-      test++;
-      if(c == ',' || reachedComma) {
-        reachedComma = true;
-        continue;
-      }
-      if(c == '\n' || c == '\r') {
-        reachedComma = false;
-        continue;
-      }
-      Serial.println("passed");
+  f = SD.open("MS_0.txt", FILE_READ);
+  String timeDataPt;
+  String ampDataPt;
+  timeDataPt = "";
+  ampDataPt = "";
+  bool reachedComma = false;
+  char c;
+  while (c = f.read()) {
+    if (c < 0) {
+      reachedComma = false;
+      ampDataPt += '\0';
+      Serial.print(" amps: ");
+      Serial.println(ampDataPt);
+      ampDataPt = "";
+      break;
     }
-    //Serial.println(timeDataPt);
-  
-  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    
-/*
-    Serial.println(String(i) + '\0');
-    Serial.println(String(MAX_NUMBER_OF_FILES) + '\0');
+    if (c == '\n') {
+      reachedComma = false;
+      ampDataPt += '\0';
 
-    file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
-
-    if (!file) {
-      Serial.println("open error opening file MS_" + String(i) + ".txt");
-      delay(1000);
-      return;
-    }
-    while (readVals(&x, &y)) {
-      timeOutput[tracker] = x;
-      ampOutput[tracker] = y;
+      float ampPt;
+      ampPt = ampDataPt.toFloat();
+      ampOutput[tracker] = ampPt;
       tracker++;
+      Serial.println(" amps: " + String(ampPt));
+      ampDataPt = "";
+      continue;
     }
-    delay(1000);
-    file.close();*/
+    else if (c == '\r') {
+      reachedComma = false;
+      continue;
+    }
+    else if (c == ',') {
+      reachedComma = true;
+      timeDataPt += '\0';
+      Serial.print("time: ");
+      Serial.print(timeDataPt);
+      timeDataPt = "";
+      continue;
+    }
+
+    if (reachedComma) {
+      ampDataPt += c;
+    }
+    else  {
+      timeDataPt += c;
+    }
+  }
+  //Serial.println(timeDataPt);
+
+  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+
+    /*
+        Serial.println(String(i) + '\0');
+        Serial.println(String(MAX_NUMBER_OF_FILES) + '\0');
+
+        file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+
+        if (!file) {
+          Serial.println("open error opening file MS_" + String(i) + ".txt");
+          delay(1000);
+          return;
+        }
+        while (readVals(&x, &y)) {
+          timeOutput[tracker] = x;
+          ampOutput[tracker] = y;
+          tracker++;
+        }
+        delay(1000);
+        file.close();*/
   }
 }
 unsigned int getNumDataPoints() {
@@ -261,13 +346,13 @@ unsigned int getNumDataPoints() {
       return;
     }
     while (dataFile.available()) {
-        if (dataFile.read() == ',') {
-          numDataPoints++;
-        }
+      if (dataFile.read() == ',') {
+        numDataPoints++;
       }
-      dataFile.close();
+    }
+    dataFile.close();
   }
-  
+
   return numDataPoints;
 }
 
@@ -450,12 +535,12 @@ float getAmps() {
 }
 
 void appendToFile(String filePath, String data, boolean closeFile) {
-  if(resetFileWrite) {
+  if (resetFileWrite) {
     file2 = SD.open(filePath, FILE_WRITE);
     resetFileWrite = false;
   }
   file2.print(data);
-  if(closeFile) {
+  if (closeFile) {
     file2.close();
     resetFileWrite = true;
   }
