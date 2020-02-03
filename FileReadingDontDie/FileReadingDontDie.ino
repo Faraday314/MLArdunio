@@ -19,6 +19,8 @@ const float fPEM_MINS = 1 / 6.0;
 const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
 const float fPEM = fPEM_MINS * 60 * 1000;
 
+char timeDataPt[8];
+char ampDataPt[8];
 
 const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS / fPEM_MINS);
 
@@ -127,8 +129,8 @@ void loop() {
 
     //dataSize = 31;
 
-    ampData = (float*) malloc(dataSize * sizeof(float));
-    timeData = (long*) malloc(dataSize * sizeof(long));
+    ampData = (float*) malloc(10 * sizeof(float));
+    timeData = (long*) malloc(10 * sizeof(long));
 
     unsigned int tracker;
     unsigned int charTrackerTime;
@@ -139,11 +141,10 @@ void loop() {
 
     File f;
     f = SD.open("MS_0.txt", FILE_READ);
-    char timeDataPt[40];
-    char ampDataPt[40];
+    
     bool reachedComma = false;
     char c;
-    while (c = f.read()) {
+    while ((c = f.read()) && tracker < 10) {
       if (c < 0) {
         reachedComma = false;
         ampDataPt[charTrackerAmps] = '\0';
@@ -156,7 +157,17 @@ void loop() {
 
         ampPt = atof(ampDataPt);
 
-        //ampData[tracker] = ampPt;
+        //free(ampDataPt);
+
+        ampData[tracker] = ampPt;
+
+
+        Serial.print("amps: ");
+        Serial.print(ampPt);
+        Serial.print(" mem: ");
+        int mem;
+        mem = availableMemory();
+        Serial.println(mem);
         tracker++;
 
         continue;
@@ -214,7 +225,6 @@ void loop() {
       ampData[28] = 18.25;
       ampData[29] = 7.59;
       ampData[30] = 6.56;*/
-    Serial.println(String(tracker) + '/0');
     for (unsigned int i = 0;  i < 10; i++) {
       float amp;
       amp = ampData[i];
@@ -255,6 +265,16 @@ void loop() {
     */
     state = 255;
   }
+}
+
+
+int availableMemory()
+{
+  int size = 8192;
+  byte *buf;
+  while ((buf = (byte *) malloc(--size)) == NULL);
+  free(buf);
+  return size;
 }
 
 void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
