@@ -123,9 +123,6 @@ void loop() {
   }
   else if (state == OPERATE) {
 
-    float amps;
-    amps = getAmps();
-
     charTrackerTime = 0;
     charTrackerAmps = 0;
 
@@ -138,7 +135,6 @@ void loop() {
     prevTime = 0;
 
     float deltaT = fmod((millis() - startTime), TRAINING_PERIOD);
-
     bool reachedComma = false;
     char c;
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
@@ -148,15 +144,13 @@ void loop() {
       }
 
       File f;
-      f = SD.open("MS_" + String(i) + ".txt");
+      f = SD.open("MS_" + String(i) + ".txt", FILE_READ);
 
       while (c = f.read()) {
         if (c < 0 && getTheAmpVal) {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
           foundTimestamp = true;
-          Serial.print(F(" amps: "));
-          Serial.println(ampDataPt);
           break;
         }
         else if(c < 0) {
@@ -170,17 +164,7 @@ void loop() {
           charTrackerAmps = 0;
           foundTimestamp = true;
 
-          Serial.print(F(" amps: "));
-          Serial.println(ampDataPt);
-
           ampPt = atof(ampDataPt);
-
-          if (ampPt > maxAmps) {
-            maxAmps = ampPt;
-          }
-          if (ampPt < minAmps) {
-            minAmps = ampPt;
-          }
           break;
         }
         else if(c == '\n') {
@@ -197,17 +181,22 @@ void loop() {
           charTrackerTime = 0;
 
           timePt = atol(timeDataPt);
-          if(deltaT > prevTime && deltaT <= timePt) {
+          
+          if(deltaT >= prevTime && deltaT < timePt) {
+            Serial.print(F("prev: "));
+            Serial.print(prevTime);
+            Serial.print(F(" deltaT: "));
+            Serial.print(deltaT);
+            Serial.print(F(" timePt: "));
+            Serial.println(timePt);
             prevTime = timePt;
             getTheAmpVal = true;
-            Serial.print(F("time: "));
-            Serial.print(timeDataPt);
           }
           
           continue;
         }
 
-        if (reachedComma && getTheAmpVal) {
+        if (reachedComma) {
           ampDataPt[charTrackerAmps] = c;
           charTrackerAmps++;
         }
@@ -219,10 +208,13 @@ void loop() {
       f.close();
     }
 
-    Serial.print(F("amps: "));
-    Serial.print(amps);
-    Serial.print(F(" state: "));
-    Serial.println(command);
+    //Serial.print(F("prevTime: "));
+    //Serial.print(prevTime);
+    //Serial.print(F(" time: "));
+    //Serial.print(deltaT);
+    //Serial.print(F(" amps: "));
+    //Serial.println(ampPt);
+    delay(1000);
   }
   else if (state == LEARN) {
 
@@ -276,8 +268,6 @@ void loop() {
           timeDataPt[charTrackerTime] = '\0';
           charTrackerTime = 0;
 
-          Serial.println(timeDataPt);
-
           continue;
         }
 
@@ -292,51 +282,22 @@ void loop() {
       }
       f.close();
     }
-
-
+    
     Serial.print(F("min: "));
     Serial.print(minAmps);
     Serial.print(F(" max: "));
-    Serial.println(maxAmps);
+    Serial.print(maxAmps);
 
     divider = (maxAmps + minAmps) / 2.0;
     divider -= 2;
 
-    //getAllData(timeData, ampData, dataSize);
-    /*
-
-        float maxAmps = 0;
-        for (unsigned int i = 0;  i < dataSize; i++) {
-          float amp;
-          amp = ampData[i];
-          if (amp > maxAmps) {
-            maxAmps = amp;
-          }
-          Serial.print("max: ");
-          Serial.print(maxAmps);
-          Serial.print(" amps: ");
-          Serial.println(amp);
-        }
-        delay(1000);
-
-        kernels = (Kernel*) malloc(dataSize * sizeof(Kernel));
-
-        for (unsigned int i = 0; i < dataSize; i++) {
-          float ampDataPt;
-          ampDataPt = ampData[i];
-          Kernel k = Kernel(ampDataPt, H);
-          kernels[i] = k;
-        }
-        findMin(kernels, dataSize, 0.0, maxAmps, 0.1, 0.01);
-        for (unsigned int i = 0;  i < minsSize; i++) {
-          Serial.print("divider: ");
-          Serial.println(mins[i]);
-        }
-    */
+    Serial.print(F(" divider: "));
+    Serial.println(divider);
+    
     startTime = millis();
     prevTime = 0;
 
-    state = 255;
+    state = OPERATE;
   }
 }
 
@@ -406,28 +367,6 @@ void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
     }
   }
   //Serial.println(timeDataPt);
-
-  for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-
-    /*
-        Serial.println(String(i) + '\0');
-        Serial.println(String(MAX_NUMBER_OF_FILES) + '\0');
-
-        file = SD.open("MS_" + String(i) + ".txt", FILE_READ);
-
-        if (!file) {
-          Serial.println("open error opening file MS_" + String(i) + ".txt");
-          delay(1000);
-          return;
-        }
-        while (readVals(&x, &y)) {
-          timeOutput[tracker] = x;
-          ampOutput[tracker] = y;
-          tracker++;
-        }
-        delay(1000);
-        file.close();*/
-  }
 }
 unsigned int getNumDataPoints() {
   unsigned int numDataPoints = 0;
