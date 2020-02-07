@@ -16,6 +16,7 @@
 #define OFF false
 
 #define AMP_PIN A3
+#define RELAY_PIN 8
 
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
@@ -62,6 +63,8 @@ long prevTime;
 unsigned int charTrackerTime;
 unsigned int charTrackerAmps;
 
+bool deleteFiles = false;
+
 void setup() {
   Serial.begin(9600);
   if (!SD.begin(4)) {
@@ -70,11 +73,13 @@ void setup() {
   }
 
   pinMode(AMP_PIN, INPUT);
-  pinMode(8, OUTPUT);
-  digitalWrite(8, HIGH);
-  /*for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    SD.remove("MS_" + String(i) + ".txt");
-    }*/
+  pinMode(RELAY_PIN, OUTPUT);
+  enablePower();
+  if (deleteFiles) {
+    for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+      SD.remove("MS_" + String(i) + ".txt");
+    }
+  }
   data = "";
   lastTimes = 0;
   startTime = millis();
@@ -95,11 +100,11 @@ void loop() {
     Serial.println(TRAINING_PERIOD);
 
     if (timeMs - startTime < TRAINING_PERIOD) {
-      data = String(timeMs - startTime) + ',' + String(amps) + '\r' + '\n';
+      data = String(timeMs - startTime) + "," + String(amps) + "\r" + "\n";
 
       //Serial.println(data);
       if (times != lastTimes) {
-        data = String(timeMs - startTime) + ',' + String(amps);
+        data = String(timeMs - startTime) + "," + String(amps);
         appendToFile("MS_" + String(times - 1) + ".txt", data, true);
         Serial.println(data);
         data = "";
@@ -123,12 +128,10 @@ void loop() {
   }
   else if (state == OPERATE) {
 
-    charTrackerTime = 0;
-    charTrackerAmps = 0;
-
     bool command;
     bool foundTimestamp;
     bool getTheAmpVal;
+    long t;
     foundTimestamp = false;
     getTheAmpVal = false;
     command = OFF;
@@ -136,40 +139,54 @@ void loop() {
 
     float deltaT = fmod((millis() - startTime), TRAINING_PERIOD);
     bool reachedComma = false;
-    char c;
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
-      if(foundTimestamp) {
+      charTrackerTime = 0;
+      charTrackerAmps = 0;
+
+      if (foundTimestamp) {
         break;
       }
 
       File f;
       f = SD.open("MS_" + String(i) + ".txt", FILE_READ);
 
+      char c;
       while (c = f.read()) {
         if (c < 0 && getTheAmpVal) {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
+          charTrackerAmps = 0;
+
+          ampPt = atof(ampDataPt);
+
           foundTimestamp = true;
+
           break;
         }
-        else if(c < 0) {
-          reachedComma = false;
-          ampDataPt[charTrackerAmps] = '\0';
-          break;
-        }
-        if (c == '\n' && getTheAmpVal) {
+        else if (c < 0) {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
           charTrackerAmps = 0;
-          foundTimestamp = true;
 
-          ampPt = atof(ampDataPt);
           break;
         }
-        else if(c == '\n') {
+        else if (c == '\n' && getTheAmpVal) {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
+          charTrackerAmps = 0;
+
+          ampPt = atof(ampDataPt);
+
+          foundTimestamp = true;
+          break;
+        }
+        else if (c == '\n') {
+          reachedComma = false;
+          ampDataPt[charTrackerAmps] = '\0';
+          charTrackerAmps = 0;
+
+          continue;
         }
         else if (c == '\r') {
           reachedComma = false;
@@ -180,19 +197,11 @@ void loop() {
           timeDataPt[charTrackerTime] = '\0';
           charTrackerTime = 0;
 
-          timePt = atol(timeDataPt);
-          
-          if(deltaT >= prevTime && deltaT < timePt) {
-            Serial.print(F("prev: "));
-            Serial.print(prevTime);
-            Serial.print(F(" deltaT: "));
-            Serial.print(deltaT);
-            Serial.print(F(" timePt: "));
-            Serial.println(timePt);
-            prevTime = timePt;
+          t = atol(timeDataPt);
+          if (deltaT >= prevTime && deltaT < t) {
+            prevTime = t;
             getTheAmpVal = true;
           }
-          
           continue;
         }
 
@@ -200,11 +209,13 @@ void loop() {
           ampDataPt[charTrackerAmps] = c;
           charTrackerAmps++;
         }
-        else {
+        else  {
           timeDataPt[charTrackerTime] = c;
           charTrackerTime++;
         }
       }
+      Serial.print(F("Filenum: "));
+      Serial.println(i);
       f.close();
     }
 
@@ -214,7 +225,29 @@ void loop() {
     //Serial.print(deltaT);
     //Serial.print(F(" amps: "));
     //Serial.println(ampPt);
-    delay(1000);
+    delay(35);
+
+    Serial.print(F("time: "));
+    Serial.print(deltaT);
+    Serial.print(F(" amps: "));
+    Serial.print(ampPt);
+    Serial.print(F(" command: "));
+
+    if (ampPt >= divider) {
+      command = ON;
+      Serial.println(F("ON"));
+    }
+    else {
+      command = OFF;
+      Serial.println(F("OFF"));
+    }
+
+    if(command) {
+      enablePower();
+    }
+    else {
+      disablePower();
+    }
   }
   else if (state == LEARN) {
 
@@ -243,11 +276,11 @@ void loop() {
           ampDataPt[charTrackerAmps] = '\0';
           break;
         }
-        if (c == '\n') {
+        else if (c == '\n') {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
           charTrackerAmps = 0;
-  
+
           ampPt = atof(ampDataPt);
 
           if (ampPt > maxAmps) {
@@ -282,18 +315,18 @@ void loop() {
       }
       f.close();
     }
-    
+
     Serial.print(F("min: "));
     Serial.print(minAmps);
     Serial.print(F(" max: "));
     Serial.print(maxAmps);
 
-    divider = (maxAmps + minAmps) / 2.0;
-    divider -= 2;
+    divider = floor((maxAmps + minAmps) / 2.0);
+    //divider -= 1.3;
 
     Serial.print(F(" divider: "));
     Serial.println(divider);
-    
+
     startTime = millis();
     prevTime = 0;
 
@@ -301,6 +334,13 @@ void loop() {
   }
 }
 
+void enablePower() {
+  digitalWrite(RELAY_PIN, HIGH);
+}
+
+void disablePower() {
+  digitalWrite(RELAY_PIN, LOW);
+}
 
 int availableMemory()
 {
