@@ -1,0 +1,8 @@
+Gaussian             KEYWORD1
+getValue 	     KEYWORD2
+getMean              KEYWORD2
+getStandardDeviation KEYWORD2
+getVariance          KEYWORD2
+setMean              KEYWORD2
+setStandardDeviation KEYWORD2
+setVariance          KEYWORD2
