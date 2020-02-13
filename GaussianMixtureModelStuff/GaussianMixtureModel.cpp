@@ -1,11 +1,11 @@
-#include "Gaussian.h"
+#include "GaussianMixtureModel.h"
 #if ARDUINO >= 100
   #include "Arduino.h"
 #else
   #include "WProgram.h"
 #endif
 
-Gaussian::Gaussian (float mean_param, float standardDeviation_param) {
+Gaussian::Gaussian(float mean_param, float standardDeviation_param) {
 	mean = mean_param;
 	standardDeviation = standardDeviation_param;
 }
@@ -37,3 +37,13 @@ void Gaussian::setStandardDeviation(float newStandardDeviation) {
 void Gaussian::setVariance(float newVariance) {
 	setStandardDeviation(sqrt(newVariance));
 }
+
+void BimodalModel::resetSums() {
+
+}
+
+BimodalModel::BimodalModel(Gaussian blob1_param, Gaussian blob2_param) {
+	blob1 = blob1_param;
+	blob2 = blob2_param;
+}
+
