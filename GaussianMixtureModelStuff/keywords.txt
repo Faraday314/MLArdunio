@@ -6,3 +6,9 @@ getVariance	KEYWORD2
 setMean	KEYWORD2
 setStandardDeviation	KEYWORD2
 setVariance	KEYWORD2
+BimodalModel	KEYWORD1
+updateModel	KEYWORD2
+finishUpdate	KEYWORD2
+getBlob1	KEYWORD2
+getBlob2	KEYWORD2
+getMaxDelta	KEYWORD2
