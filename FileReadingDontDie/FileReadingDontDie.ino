@@ -1,5 +1,6 @@
 #include <SD.h>
-#include <KDE.h>
+#include <GaussianMixtureModel.h>
+#include <BimodalModelLib.h>
 
 //Amount of millisectonds to train for
 
@@ -23,9 +24,6 @@ const float fPEM_MINS = 1 / 6.0;
 const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
 const float fPEM = fPEM_MINS * 60 * 1000;
 
-float maxAmps;
-float minAmps;
-
 char ampDataPt[30];
 char timeDataPt[30];
 
@@ -47,7 +45,6 @@ float divider;
 long *timeData;
 float *ampData;
 
-Kernel *kernels;
 float *mins;
 
 unsigned int dataSize;
@@ -242,7 +239,7 @@ void loop() {
       Serial.println(F("OFF"));
     }
 
-    if(command) {
+    if (command) {
       enablePower();
     }
     else {
@@ -251,18 +248,12 @@ void loop() {
   }
   else if (state == LEARN) {
 
-    //dataSize = getNumDataPoints();
-
-    //dataSize = 31;
-
-    //ampData = (float*) malloc(10 * sizeof(float));
-    //timeData = (long*) malloc(10 * sizeof(long));
+    unsigned int dataSize = 0;
+    float mean = 0;
+    float variance = 0;
 
     charTrackerTime = 0;
     charTrackerAmps = 0;
-
-    maxAmps = 0;
-    minAmps = MAX_FLOAT_VAL;
 
     bool reachedComma = false;
     char c;
@@ -274,6 +265,12 @@ void loop() {
         if (c < 0) {
           reachedComma = false;
           ampDataPt[charTrackerAmps] = '\0';
+
+          ampPt = atof(ampDataPt);
+
+          mean += ampPt;
+          dataSize++;
+
           break;
         }
         else if (c == '\n') {
@@ -283,12 +280,8 @@ void loop() {
 
           ampPt = atof(ampDataPt);
 
-          if (ampPt > maxAmps) {
-            maxAmps = ampPt;
-          }
-          if (ampPt < minAmps) {
-            minAmps = ampPt;
-          }
+          mean += ampPt;
+          dataSize++;
 
           continue;
         }
@@ -316,21 +309,81 @@ void loop() {
       f.close();
     }
 
-    Serial.print(F("min: "));
-    Serial.print(minAmps);
-    Serial.print(F(" max: "));
-    Serial.print(maxAmps);
+    if (dataSize != 0) {
+      mean /= dataSize;
+    }
 
-    divider = floor((maxAmps + minAmps) / 2.0);
-    //divider -= 1.3;
+    ////////////////////////////////////////////////////////////
+    //Calculate the Variance////////////////////////
+    ////////////////////////////////////////////////
 
-    Serial.print(F(" divider: "));
-    Serial.println(divider);
+    charTrackerTime = 0;
+    charTrackerAmps = 0;
+    reachedComma = false;
+    for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+      File f;
+      f = SD.open("MS_" + String(i) + ".txt");
+
+      while (c = f.read()) {
+        if (c < 0) {
+          reachedComma = false;
+          ampDataPt[charTrackerAmps] = '\0';
+
+          ampPt = atof(ampDataPt);
+
+          variance += (ampPt - mean) * (ampPt - mean);
+
+          break;
+        }
+        else if (c == '\n') {
+          reachedComma = false;
+          ampDataPt[charTrackerAmps] = '\0';
+          charTrackerAmps = 0;
+
+          ampPt = atof(ampDataPt);
+
+          variance += (ampPt - mean) * (ampPt - mean);
+
+          continue;
+        }
+        else if (c == '\r') {
+          reachedComma = false;
+          continue;
+        }
+        else if (c == ',') {
+          reachedComma = true;
+          timeDataPt[charTrackerTime] = '\0';
+          charTrackerTime = 0;
+
+          continue;
+        }
+
+        if (reachedComma) {
+          ampDataPt[charTrackerAmps] = c;
+          charTrackerAmps++;
+        }
+        else  {
+          timeDataPt[charTrackerTime] = c;
+          charTrackerTime++;
+        }
+      }
+      f.close();
+    }
+
+    if(dataSize != 0) {
+      variance /= dataSize;
+    }
+    //divider
+
+    Serial.print(F("average: "))                                   ;
+    Serial.print(mean);
+    Serial.print(F(" variance: "));
+    Serial.println(variance);
 
     startTime = millis();
     prevTime = 0;
 
-    state = OPERATE;
+    state = 255;
   }
 }
 
@@ -463,120 +516,6 @@ bool readVals(long * v1, float * v2) {
   }
   *v2 = (float) strtod(ptr, &str);
   return str != ptr;  // true if number found
-}
-
-void findMin(Kernel * kernels, unsigned int dataSize, float lowerBound, float upperBound, float algStep, float lossThreshold) {
-  float currentX = lowerBound;
-  float lastValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
-  currentX += algStep / 2;
-  float currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
-  float delta = currentValue - lastValue;
-
-  while (delta == 0.0) {
-    currentX += algStep;
-    lastValue = currentValue;
-    currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
-    delta = currentValue - lastValue;
-  }
-
-  currentX += algStep;
-  lastValue = currentValue;
-  currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
-  delta = currentValue - lastValue;
-
-  int lastSgn = signum(delta);
-  int sgn = lastSgn;
-
-  unsigned int arrSize = 0;
-
-  float currentXCpy = currentX;
-  float lastSgnCpy = lastSgn;
-  float sgnCpy = sgn;
-  float lastValueCpy = lastValue;
-  float currentValueCpy = currentValue;
-
-  //Find how many mins there are
-  while (currentXCpy < upperBound) {
-    lastSgnCpy = sgnCpy;
-    currentXCpy += algStep;
-    lastValueCpy = currentValueCpy;
-
-    currentValueCpy = Kernel::kernelConsensus(kernels, dataSize, currentXCpy);
-    delta = currentValueCpy - lastValueCpy;
-    sgnCpy = signum(delta);
-
-    if (sgnCpy - lastSgnCpy > 0) {
-      arrSize++;
-    }
-  }
-
-  float maxRanges[arrSize];
-  unsigned int index = 0;
-
-  //Find the upper bound of all the mins
-  while (currentX < upperBound) {
-    lastSgn = sgn;
-    currentX += algStep;
-    lastValue = currentValue;
-
-    currentValue = Kernel::kernelConsensus(kernels, dataSize, currentX);
-    delta = currentValue - lastValue;
-    sgn = signum(delta);
-
-    if (sgn - lastSgn > 0) {
-      maxRanges[index] = currentX;
-      index++;
-    }
-  }
-
-  boolean lastMidFloored = false;
-  float dividers[arrSize];
-  float flooredDividers[arrSize];
-  unsigned int usedVals = 0;
-  unsigned int usedFloorVals = 0;
-
-  //Refine the estimated mins
-  for (unsigned int i = 0; i < arrSize; i++) {
-    lastValue = Kernel::kernelConsensus(kernels, dataSize, maxRanges[i] - algStep);
-    float mid = (2 * maxRanges[i] - algStep) / 2;
-    currentValue = Kernel::kernelConsensus(kernels, dataSize, mid);
-    float lBound = maxRanges[i] - algStep;
-    float uBound = maxRanges[i];
-    while (abs(currentValue - lastValue) > lossThreshold) {
-      float rmid = (mid + uBound) / 2;
-      float lmid = (lBound + mid) / 2;
-
-      float rmidVal = Kernel::kernelConsensus(kernels, dataSize, rmid);
-      float lmidVal = Kernel::kernelConsensus(kernels, dataSize, lmid);
-
-      mid = rmidVal > lmidVal ? lmid : rmid;
-
-      lastValue = currentValue;
-      currentValue = Kernel::kernelConsensus(kernels, dataSize, mid);
-    }
-
-    if (abs(currentValue - lastValue) == 0) {
-      flooredDividers[usedFloorVals] = mid;
-      usedFloorVals++;
-      lastMidFloored = true;
-    }
-    else if (lastMidFloored) {
-      dividers[usedVals] = (flooredDividers[usedFloorVals - 1] + mid) / 2;
-      usedVals++;
-      lastMidFloored = false;
-    }
-    else {
-      dividers[usedVals] = mid;
-      usedVals++;
-    }
-  }
-
-  mins = (float*) malloc(usedVals * sizeof(float));
-  minsSize = usedVals;
-
-  for (unsigned int i = 0; i < usedVals; i++) {
-    mins[i] = dividers[i];
-  }
 }
 
 float getAmps() {
