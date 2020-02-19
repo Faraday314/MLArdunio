@@ -19,6 +19,11 @@
 #define AMP_PIN A3
 #define RELAY_PIN 8
 
+#define DELTA_THRESH 1e-6
+#define MEAN_MIN_DELTA 3
+#define ITERS 20
+#define RAND_GAP_MAX 1
+
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
 const float TRAINING_PERIOD = TRAINING_PERIOD_MINS * 1000 * 60;
@@ -251,6 +256,12 @@ void loop() {
     unsigned int dataSize = 0;
     float mean = 0;
     float variance = 0;
+    float maxVal = 0;
+    float minVal = MAX_FLOAT_VAL;
+
+    ////////////////////////////////////////////////
+    //Calculate the Mean////////////////////////////
+    ////////////////////////////////////////////////
 
     charTrackerTime = 0;
     charTrackerAmps = 0;
@@ -268,6 +279,13 @@ void loop() {
 
           ampPt = atof(ampDataPt);
 
+          if (ampPt > maxVal) {
+            maxVal = ampPt;
+          }
+          if (ampPt < minVal) {
+            minVal = ampPt;
+          }
+
           mean += ampPt;
           dataSize++;
 
@@ -279,6 +297,13 @@ void loop() {
           charTrackerAmps = 0;
 
           ampPt = atof(ampDataPt);
+
+          if (ampPt > maxVal) {
+            maxVal = ampPt;
+          }
+          if (ampPt < minVal) {
+            minVal = ampPt;
+          }
 
           mean += ampPt;
           dataSize++;
@@ -313,7 +338,7 @@ void loop() {
       mean /= dataSize;
     }
 
-    ////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////
     //Calculate the Variance////////////////////////
     ////////////////////////////////////////////////
 
@@ -370,15 +395,96 @@ void loop() {
       f.close();
     }
 
-    if(dataSize != 0) {
+    if (dataSize != 0) {
       variance /= dataSize;
     }
-    //divider
 
-    Serial.print(F("average: "))                                   ;
-    Serial.print(mean);
-    Serial.print(F(" variance: "));
-    Serial.println(variance);
+    ////////////////////////////////////////////////
+    //DO THE THING//////////////////////////////////
+    ////////////////////////////////////////////////
+
+    float avgDivider = 0;
+    unsigned int iterations = 0;
+    while (iterations < ITERS) {
+      float randVal1 = random(minVal, maxVal);
+      float randVal2 = random(minVal, maxVal);
+      while (abs(randVal2 - randVal1) < RAND_GAP_MAX) {
+        randVal2 = random(minVal, maxVal);
+      }
+
+      Gaussian blob1Init = Gaussian(randVal1, sqrt(variance));
+      Gaussian blob2Init = Gaussian(randVal2, sqrt(variance));
+
+      BimodalModel model = BimodalModel(blob1Init, blob2Init);
+
+      while (model.getMaxDelta() > DELTA_THRESH) {
+        charTrackerTime = 0;
+        charTrackerAmps = 0;
+        reachedComma = false;
+        for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+          File f;
+          f = SD.open("MS_" + String(i) + ".txt");
+
+          while (c = f.read()) {
+            if (c < 0) {
+              reachedComma = false;
+              ampDataPt[charTrackerAmps] = '\0';
+
+              ampPt = atof(ampDataPt);
+              model.updateModel(ampPt);
+
+              break;
+            }
+            else if (c == '\n') {
+              reachedComma = false;
+              ampDataPt[charTrackerAmps] = '\0';
+              charTrackerAmps = 0;
+
+              ampPt = atof(ampDataPt);
+              model.updateModel(ampPt);
+
+              continue;
+            }
+            else if (c == '\r') {
+              reachedComma = false;
+              continue;
+            }
+            else if (c == ',') {
+              reachedComma = true;
+              timeDataPt[charTrackerTime] = '\0';
+              charTrackerTime = 0;
+
+              continue;
+            }
+
+            if (reachedComma) {
+              ampDataPt[charTrackerAmps] = c;
+              charTrackerAmps++;
+            }
+            else  {
+              timeDataPt[charTrackerTime] = c;
+              charTrackerTime++;
+            }
+          }
+          f.close();
+        }
+        model.finishUpdate(dataSize);
+      }
+      if(abs(model.getBlob1().getMean() - model.getBlob2().getMean()) < MEAN_MIN_DELTA) {
+        continue;
+      }
+
+      Serial.println(F("blob complete: "));
+
+      avgDivider += (model.getBlob1().getMean() + model.getBlob2().getMean())/2.0;
+      iterations++;
+    }
+
+    avgDivider /= ITERS;
+    divider = avgDivider;
+
+    Serial.print(F("divider: "))                                   ;
+    Serial.println(divider);
 
     startTime = millis();
     prevTime = 0;
