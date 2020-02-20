@@ -1,14 +1,15 @@
 #include <SD.h>
+#include <Wire.h>
 #include <GaussianMixtureModel.h>
 #include <BimodalModelLib.h>
 
-//Amount of millisectonds to train for
-
+#define DS3231_I2C_ADDRESS 0x68
 
 #define DATACOLLECT 0
 #define LEARN 1
 #define OPERATE 2
 #define RELEARN 3
+
 #define MAX_FLOAT_VAL 3.4028235e38
 #define MIN_FLOAT_VAL -MAX_FLOAT_VAL
 
@@ -16,10 +17,16 @@
 #define OFF false
 
 #define AMP_PIN A3
+#define ENABLE_AMP_PIN 5
 #define RELAY_PIN 8
 #define CHIP_SELECT 4
+#define POWER_CUT_PIN 2
 
 #define DELTA_THRESH 0.05
+
+#define TONE_DETECTION_PIN A2
+#define NUM_TIMES_FOR_INIT 40
+#define TONE_THRESHOLD 40
 
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
@@ -34,8 +41,8 @@ const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS / fPEM_MINS)
 unsigned int state;
 int lastFile = 0;
 float lastTime = 0;
-boolean allowWrite = true;
 boolean resetFileWrite = true;
+boolean allowWrite = true;
 
 long startTime;
 
@@ -56,9 +63,29 @@ unsigned int charTrackerAmps;
 
 File file;
 
+int toneVal;
+const float varVolt1 = .00133;
+const float varProccess1 = 5e-6;
+float Pc1 = 0;
+float G1 = 0;
+float P1 = 1;
+float Xp1 = 0;
+float Zp1 = 0;
+float Xe1 = 0;
+const float varVolt2 = .00683;
+const float varProccess2 = 5e-8;
+float Pc2 = 0;
+float G2 = 0;
+float P2 = 1;
+float Xp2 = 0;
+float Zp2 = 0;
+float Xe2 = 0;
+
 bool deleteFiles = false;
 
 void setup() {
+  Wire.begin();
+
   Serial.begin(9600);
   if (!SD.begin(CHIP_SELECT)) {
     Serial.println("begin error");
@@ -66,8 +93,9 @@ void setup() {
   }
 
   pinMode(AMP_PIN, INPUT);
+  pinMode(ENABLE_AMP_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
-  enablePower();
+
   if (deleteFiles) {
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
       SD.remove("MS_" + String(i) + ".txt");
@@ -79,48 +107,57 @@ void setup() {
   state = LEARN;
 }
 void loop() {
-
-  //Datacollect state is WIP
   if (state == DATACOLLECT) {
+    enablePower();
+    enableAmmeter();
+
     long timeMs = millis();
     float amps = getAmps();
 
-    unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
-    Serial.print(F("delta T: "));
-    Serial.print(timeMs - startTime);
-    Serial.print(F(", "));
-    Serial.print(F("lim: "));
-    Serial.println(TRAINING_PERIOD);
+    if(powerCut()) {
+      allowWrite = false;
+    }
 
-    if (timeMs - startTime < TRAINING_PERIOD) {
-      data = String(timeMs - startTime) + "," + String(amps) + "\r" + "\n";
+    if (allowWrite) {
 
-      //Serial.println(data);
-      if (times != lastTimes) {
-        data = String(timeMs - startTime) + "," + String(amps);
-        appendToFile("MS_" + String(times - 1) + ".txt", data, true);
-        Serial.println(data);
-        data = "";
-        Serial.println(F("RESET"));
-        lastTimes = times;
-        Serial.print(F("file: "));
-        Serial.println(times - 1);
+      unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
+
+      Serial.print(F("delta T: "));
+      Serial.print(timeMs - startTime);
+      Serial.print(F(", "));
+      Serial.print(F("lim: "));
+      Serial.println(TRAINING_PERIOD);
+
+
+      if (timeMs - startTime < TRAINING_PERIOD) {
+        data = String(timeMs - startTime) + "," + String(amps) + "\r" + "\n";
+
+        if (times != lastTimes) {
+          data = String(timeMs - startTime) + "," + String(amps);
+          appendToFile("MS_" + String(times - 1) + ".txt", data, true);
+          Serial.println(data);
+          data = "";
+          Serial.println(F("RESET"));
+          lastTimes = times;
+          Serial.print(F("file: "));
+          Serial.println(times - 1);
+        }
+        else {
+          appendToFile("MS_" + String(times) + ".txt", data, false);
+        }
       }
       else {
-        appendToFile("MS_" + String(times) + ".txt", data, false);
+        data = String(timeMs - startTime) + "," + String(amps);
+        appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data, true);
+        data = "";
+        Serial.print(F("file: "));
+        Serial.println(MAX_NUMBER_OF_FILES - 1);
+        disableAmmeter();
+        state = LEARN;
       }
-    }
-    else {
-      data = String(timeMs - startTime) + "," + String(amps);
-      appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data, true);
-      data = "";
-      Serial.print("file: ");
-      Serial.println(MAX_NUMBER_OF_FILES - 1);
-      state = LEARN;
     }
   }
   else if (state == OPERATE) {
-
     bool command;
     bool foundTimestamp;
     bool getTheAmpVal;
@@ -420,7 +457,7 @@ void loop() {
 
             ampPt = atof(ampDataPt);
             model.updateModel(ampPt);
-            
+
             break;
           }
           else if (c == '\n') {
@@ -430,7 +467,7 @@ void loop() {
 
             ampPt = atof(ampDataPt);
             model.updateModel(ampPt);
-           
+
             continue;
           }
           else if (c == '\r') {
@@ -456,11 +493,11 @@ void loop() {
         }
         f.close();
       }
-      
+
       model.finishUpdate(dataSize);
     }
 
-    divider = (model.getBlob1().getMean() + model.getBlob2().getMean())/2.0;
+    divider = (model.getBlob1().getMean() + model.getBlob2().getMean()) / 2.0;
 
     Serial.println(F("Learning Complete"));
 
@@ -470,7 +507,7 @@ void loop() {
     startTime = millis();
     prevTime = 0;
 
-    state = 255;
+    state = OPERATE;
   }
 }
 
@@ -480,6 +517,14 @@ void enablePower() {
 
 void disablePower() {
   digitalWrite(RELAY_PIN, LOW);
+}
+
+void enableAmmeter() {
+  digitalWrite(ENABLE_AMP_PIN, HIGH);
+}
+
+void disableAmmeter() {
+  digitalWrite(ENABLE_AMP_PIN, LOW);
 }
 
 float getAmps() {
@@ -519,4 +564,102 @@ void appendToFile(String filePath, String data, boolean closeFile) {
     file.close();
     resetFileWrite = true;
   }
+}
+
+//Convert normal decimal numbers to binary coded decimal
+byte decToBcd(byte val) {
+  return ( (val / 10 * 16) + (val % 10) );
+}
+
+//Convert binary coded decimal to normal decimal numbers
+byte bcdToDec(byte val) {
+  return ( (val / 16 * 10) + (val % 16) );
+}
+
+void readTimeOfDay(
+  byte *second,
+  byte *minute,
+  byte *hour) {
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  *second = bcdToDec(Wire.read() & 0x7f);
+  *minute = bcdToDec(Wire.read());
+  *hour = bcdToDec(Wire.read() & 0x3f);
+}
+
+unsigned long getTimeIntoDay() {
+  byte second, minute, hour;
+  readTimeOfDay(&second, &minute, &hour);
+  unsigned long timeMillis = ((unsigned int) second) * 1000;
+  timeMillis += ((unsigned long) minute) * 60000;
+  timeMillis += ((unsigned long) hour) * 3600000;
+
+  return timeMillis;
+
+}
+
+byte getDay() {
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  Wire.read();
+  Wire.read();
+  Wire.read();
+  return bcdToDec(Wire.read());
+}
+
+void initializeToneDecoder() {
+  for (int i = 0; i++; i < NUM_TIMES_FOR_INIT) {
+    toneVal =  512 - analogRead(TONE_DETECTION_PIN);
+    toneVal = abs(toneVal);
+
+    Pc1 = P1 + varProccess1;
+    G1 = Pc1 / (Pc1 + varVolt1);
+    P1 = (1 - G1) * Pc1;
+    Xp1 = Xe1;
+    Zp1 = Xp1;
+    Xe1 = G1 * (toneVal - Zp1) + Xp1;
+
+    Pc2 = P2 + varProccess2;
+    G2 = Pc2 / (Pc2 + varVolt2);
+    P2 = (1 - G2) * Pc2;
+    Xp2 = Xe2;
+    Zp2 = Xp2;
+    Xe2 = G2 * (toneVal - Zp2) + Xp2;
+  }
+}
+boolean checkTone() {
+  for (int i = 0; i++; i < NUM_TIMES_FOR_INIT) {
+    toneVal =  512 - analogRead(TONE_DETECTION_PIN);
+    toneVal = abs(toneVal);
+
+    Pc1 = P1 + varProccess1;
+    G1 = Pc1 / (Pc1 + varVolt1);
+    P1 = (1 - G1) * Pc1;
+    Xp1 = Xe1;
+    Zp1 = Xp1;
+    Xe1 = G1 * (toneVal - Zp1) + Xp1;
+
+    Pc2 = P2 + varProccess2;
+    G2 = Pc2 / (Pc2 + varVolt2);
+    P2 = (1 - G2) * Pc2;
+    Xp2 = Xe2;
+    Zp2 = Xp2;
+    Xe2 = G2 * (toneVal - Zp2) + Xp2;
+    float ending = Xe2 - Xe1;
+    ending = abs(ending);
+    if (ending > TONE_THRESHOLD) {
+      return true;
+    }
+    return false;
+  }
+}
+
+boolean powerCut() {
+  return digitalRead(POWER_CUT_PIN) == HIGH;
 }
