@@ -13,6 +13,8 @@ BimodalModel::BimodalModel(Gaussian blob1_param, Gaussian blob2_param) {
 	weight1 = 0.5;
 	weight2 = 0.5;
 
+	resetSums();
+
 	maxDelta = 100000;
 }
 
@@ -40,25 +42,36 @@ void BimodalModel::resetSums() {
 }
 
 void BimodalModel::calcMaxDelta(unsigned int numberDatapoints) {
-	float deltas[6] = {
-		abs(weight1 - gammaSum1 / numberDatapoints),
-		abs(weight2 - gammaSum2 / numberDatapoints),
+	
+	float delta;
 
-		abs(blob1.getMean() - gammaProductSum1 / gammaSum1),
-		abs(blob2.getMean() - gammaProductSum2 / gammaSum2),
+	delta = weight1 - (gammaSum1 / numberDatapoints);
+	maxDelta = abs(delta);
 
-		abs(blob1.getVariance() - gammaVarianceSum1 / gammaSum1),
-		abs(blob2.getVariance() - gammaVarianceSum2 / gammaSum2)
-	};
-
-	float maxDeltaCalculated = 0;
-	for (unsigned int i = 0; i < 6; i++) {
-		if (deltas[i] > maxDelta) {
-			maxDeltaCalculated = deltas[i];
-		}
+	delta = weight2 - (gammaSum2 / numberDatapoints);
+	if (abs(delta) > maxDelta) {
+		maxDelta = abs(delta);
 	}
 
-	maxDelta = maxDeltaCalculated;
+	delta = blob1.getMean() - (gammaProductSum1 / gammaSum1);
+	if (abs(delta) > maxDelta) {
+		maxDelta = abs(delta);
+	}
+
+	delta = blob2.getMean() - (gammaProductSum2 / gammaSum2);
+	if (abs(delta) > maxDelta) {
+		maxDelta = abs(delta);
+	}
+
+	delta = blob1.getVariance() - (gammaVarianceSum1 / gammaSum1);
+	if (abs(delta) > maxDelta) {
+		maxDelta = abs(delta);
+	}
+
+	delta = blob2.getVariance() - (gammaVarianceSum2 / gammaSum2);
+	if (abs(delta) > maxDelta) {
+		maxDelta = abs(delta);
+	}
 }
 
 void BimodalModel::updateModel(float x) {
@@ -82,7 +95,7 @@ void BimodalModel::finishUpdate(unsigned int numberDatapoints) {
 	weight2 = gammaSum2 / numberDatapoints;
 
 	float newMean1 = gammaProductSum1 / gammaSum1;
-	float newMean2 = gammaVarianceSum2 / gammaSum2;
+	float newMean2 = gammaProductSum2 / gammaSum2;
 
 	blob1.setMean(newMean1);
 	blob2.setMean(newMean2);
@@ -106,4 +119,36 @@ Gaussian BimodalModel::getBlob2() {
 
 float BimodalModel::getMaxDelta() {
 	return maxDelta;
+}
+
+float BimodalModel::getGammaSum1() {
+	return gammaSum1;
+}
+
+float BimodalModel::getGammaProductSum1() {
+	return gammaProductSum1;
+}
+
+float BimodalModel::getGammaVarianceSum1() {
+	return gammaVarianceSum1;
+}
+
+float BimodalModel::getGammaSum2() {
+	return gammaSum2;
+}
+
+float BimodalModel::getGammaProductSum2() {
+	return gammaProductSum2;
+}
+
+float BimodalModel::getGammaVarianceSum2() {
+	return gammaVarianceSum2;
+}
+
+float BimodalModel::getWeight1() {
+	return weight1;
+}
+
+float BimodalModel::getWeight2() {
+	return weight2;
 }

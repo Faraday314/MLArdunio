@@ -18,6 +18,14 @@ class BimodalModel {
 		Gaussian getBlob1();
 		Gaussian getBlob2();
 		float getMaxDelta();
+		float getGammaSum1();
+		float getGammaProductSum1();
+		float getGammaVarianceSum1();
+		float getGammaSum2();
+		float getGammaProductSum2();
+		float getGammaVarianceSum2();
+		float getWeight1();
+		float getWeight2();
 	
 	private:
 		Gaussian blob1 = Gaussian(0,0);

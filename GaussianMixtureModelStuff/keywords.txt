@@ -12,3 +12,11 @@ finishUpdate	KEYWORD2
 getBlob1	KEYWORD2
 getBlob2	KEYWORD2
 getMaxDelta	KEYWORD2
+getGammaSum1	KEYWORD2
+getGammaProductSum1	KEYWORD2
+getGammaVarianceSum1	KEYWORD2
+getGammaSum2	KEYWORD2
+getGammaProductSum2	KEYWORD2
+getGammaVarianceSum2	KEYWORD2
+getWeight1	KEYWORD2
+getWeight2	KEYWORD2

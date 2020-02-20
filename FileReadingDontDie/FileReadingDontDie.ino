@@ -9,7 +9,6 @@
 #define LEARN 1
 #define OPERATE 2
 #define RELEARN 3
-#define H 5.5
 #define MAX_FLOAT_VAL 3.4028235e38
 #define MIN_FLOAT_VAL -MAX_FLOAT_VAL
 
@@ -18,11 +17,9 @@
 
 #define AMP_PIN A3
 #define RELAY_PIN 8
+#define CHIP_SELECT 4
 
-#define DELTA_THRESH 1e-6
-#define MEAN_MIN_DELTA 3
-#define ITERS 20
-#define RAND_GAP_MAX 1
+#define DELTA_THRESH 0.05
 
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
@@ -34,23 +31,15 @@ char timeDataPt[30];
 
 const unsigned int MAX_NUMBER_OF_FILES = floor(TRAINING_PERIOD_MINS / fPEM_MINS);
 
-boolean allowWrite = true;
 unsigned int state;
 int lastFile = 0;
 float lastTime = 0;
+boolean allowWrite = true;
 boolean resetFileWrite = true;
-File file;
-File bam;
-File file2;
 
 long startTime;
 
 float divider;
-
-long *timeData;
-float *ampData;
-
-float *mins;
 
 unsigned int dataSize;
 unsigned int minsSize;
@@ -65,11 +54,13 @@ long prevTime;
 unsigned int charTrackerTime;
 unsigned int charTrackerAmps;
 
+File file;
+
 bool deleteFiles = false;
 
 void setup() {
   Serial.begin(9600);
-  if (!SD.begin(4)) {
+  if (!SD.begin(CHIP_SELECT)) {
     Serial.println("begin error");
     return;
   }
@@ -221,12 +212,6 @@ void loop() {
       f.close();
     }
 
-    //Serial.print(F("prevTime: "));
-    //Serial.print(prevTime);
-    //Serial.print(F(" time: "));
-    //Serial.print(deltaT);
-    //Serial.print(F(" amps: "));
-    //Serial.println(ampPt);
     delay(35);
 
     Serial.print(F("time: "));
@@ -405,85 +390,81 @@ void loop() {
 
     float avgDivider = 0;
     unsigned int iterations = 0;
-    while (iterations < ITERS) {
-      float randVal1 = random(minVal, maxVal);
-      float randVal2 = random(minVal, maxVal);
-      while (abs(randVal2 - randVal1) < RAND_GAP_MAX) {
-        randVal2 = random(minVal, maxVal);
-      }
+    randomSeed(analogRead(A0));
+    float randVal1 = random(minVal, maxVal);
+    float randVal2 = random(minVal, maxVal);
 
-      Gaussian blob1Init = Gaussian(randVal1, sqrt(variance));
-      Gaussian blob2Init = Gaussian(randVal2, sqrt(variance));
-
-      BimodalModel model = BimodalModel(blob1Init, blob2Init);
-
-      while (model.getMaxDelta() > DELTA_THRESH) {
-        charTrackerTime = 0;
-        charTrackerAmps = 0;
-        reachedComma = false;
-        for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-          File f;
-          f = SD.open("MS_" + String(i) + ".txt");
-
-          while (c = f.read()) {
-            if (c < 0) {
-              reachedComma = false;
-              ampDataPt[charTrackerAmps] = '\0';
-
-              ampPt = atof(ampDataPt);
-              model.updateModel(ampPt);
-
-              break;
-            }
-            else if (c == '\n') {
-              reachedComma = false;
-              ampDataPt[charTrackerAmps] = '\0';
-              charTrackerAmps = 0;
-
-              ampPt = atof(ampDataPt);
-              model.updateModel(ampPt);
-
-              continue;
-            }
-            else if (c == '\r') {
-              reachedComma = false;
-              continue;
-            }
-            else if (c == ',') {
-              reachedComma = true;
-              timeDataPt[charTrackerTime] = '\0';
-              charTrackerTime = 0;
-
-              continue;
-            }
-
-            if (reachedComma) {
-              ampDataPt[charTrackerAmps] = c;
-              charTrackerAmps++;
-            }
-            else  {
-              timeDataPt[charTrackerTime] = c;
-              charTrackerTime++;
-            }
-          }
-          f.close();
-        }
-        model.finishUpdate(dataSize);
-      }
-      if(abs(model.getBlob1().getMean() - model.getBlob2().getMean()) < MEAN_MIN_DELTA) {
-        continue;
-      }
-
-      Serial.println(F("blob complete: "));
-
-      avgDivider += (model.getBlob1().getMean() + model.getBlob2().getMean())/2.0;
-      iterations++;
+    while (randVal1 == randVal2) {
+      randVal2 = random(minVal, maxVal);
     }
 
-    avgDivider /= ITERS;
-    divider = avgDivider;
+    Serial.println(F("Starting Gaussian Mixture Modeling..."));
 
-    Serial.print(F("divider: "))                                   ;
+    Gaussian blob1Init = Gaussian(randVal1, sqrt(variance));
+    Gaussian blob2Init = Gaussian(randVal2, sqrt(variance));
+
+    BimodalModel model = BimodalModel(blob1Init, blob2Init);
+
+    while (model.getMaxDelta() > DELTA_THRESH) {
+      charTrackerTime = 0;
+      charTrackerAmps = 0;
+      reachedComma = false;
+      for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
+        File f;
+        f = SD.open("MS_" + String(i) + ".txt");
+
+        while (c = f.read()) {
+          if (c < 0) {
+            reachedComma = false;
+            ampDataPt[charTrackerAmps] = '\0';
+
+            ampPt = atof(ampDataPt);
+            model.updateModel(ampPt);
+            
+            break;
+          }
+          else if (c == '\n') {
+            reachedComma = false;
+            ampDataPt[charTrackerAmps] = '\0';
+            charTrackerAmps = 0;
+
+            ampPt = atof(ampDataPt);
+            model.updateModel(ampPt);
+           
+            continue;
+          }
+          else if (c == '\r') {
+            reachedComma = false;
+            continue;
+          }
+          else if (c == ',') {
+            reachedComma = true;
+            timeDataPt[charTrackerTime] = '\0';
+            charTrackerTime = 0;
+
+            continue;
+          }
+
+          if (reachedComma) {
+            ampDataPt[charTrackerAmps] = c;
+            charTrackerAmps++;
+          }
+          else  {
+            timeDataPt[charTrackerTime] = c;
+            charTrackerTime++;
+          }
+        }
+        f.close();
+      }
+      
+      model.finishUpdate(dataSize);
+    }
+
+    divider = (model.getBlob1().getMean() + model.getBlob2().getMean())/2.0;
+
+    Serial.println(F("Learning Complete"));
+
+    Serial.print(F("Divider: "));
     Serial.println(divider);
 
     startTime = millis();
@@ -499,129 +480,6 @@ void enablePower() {
 
 void disablePower() {
   digitalWrite(RELAY_PIN, LOW);
-}
-
-int availableMemory()
-{
-  int size = 8192;
-  byte *buf;
-  while ((buf = (byte *) malloc(--size)) == NULL);
-  free(buf);
-  return size;
-}
-
-void getAllData(long * timeOutput, float * ampOutput, unsigned int listSize) {
-  unsigned int tracker;
-  tracker = 0;
-  long x;
-  float y;
-
-  File f;
-  f = SD.open("MS_0.txt", FILE_READ);
-  String timeDataPt;
-  String ampDataPt;
-  timeDataPt = "";
-  ampDataPt = "";
-  bool reachedComma = false;
-  char c;
-  while (c = f.read()) {
-    if (c < 0) {
-      reachedComma = false;
-      ampDataPt += '\0';
-      Serial.print(" amps: ");
-      Serial.println(ampDataPt);
-      ampDataPt = "";
-      break;
-    }
-    if (c == '\n') {
-      reachedComma = false;
-      ampDataPt += '\0';
-
-      float ampPt;
-      ampPt = ampDataPt.toFloat();
-      ampOutput[tracker] = ampPt;
-      tracker++;
-      Serial.println(" amps: " + String(ampPt));
-      ampDataPt = "";
-      continue;
-    }
-    else if (c == '\r') {
-      reachedComma = false;
-      continue;
-    }
-    else if (c == ',') {
-      reachedComma = true;
-      timeDataPt += '\0';
-      Serial.print("time: ");
-      Serial.print(timeDataPt);
-      timeDataPt = "";
-      continue;
-    }
-
-    if (reachedComma) {
-      ampDataPt += c;
-    }
-    else  {
-      timeDataPt += c;
-    }
-  }
-  //Serial.println(timeDataPt);
-}
-unsigned int getNumDataPoints() {
-  unsigned int numDataPoints = 0;
-
-  for (int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
-    File dataFile = SD.open("MS_" + String(i) + ".txt", FILE_READ);
-    if (!dataFile) {
-      Serial.println("error opening MS_" + String(i) + ".txt");
-      return;
-    }
-    while (dataFile.available()) {
-      if (dataFile.read() == ',') {
-        numDataPoints++;
-      }
-    }
-    dataFile.close();
-  }
-
-  return numDataPoints;
-}
-
-bool readLine(File & f, char* line, size_t maxLen) {
-  for (size_t n = 0; n < maxLen; n++) {
-    int c;
-    c = f.read();
-    if ( c < 0 && n == 0) {
-      Serial.println("EOF");
-      return false;  // EOF
-    }
-    if (c < 0 || c == '\n') {
-      line[n] = 0;
-      return true;
-    }
-    line[n] = c;
-  }
-  return false; // line too long
-}
-
-bool readVals(long * v1, float * v2) {
-  char line[40], *ptr, *str;
-  if (!readLine(file, line, sizeof(line))) {
-    return false;  // EOF or too long
-  }
-
-  *v1 = strtol(line, &ptr, 10);
-
-  if (ptr == line) {
-    Serial.println("bad number");
-    return false;  // bad number if equal
-  }
-
-  while (*ptr) {
-    if (*ptr++ == ',') break;
-  }
-  *v2 = (float) strtod(ptr, &str);
-  return str != ptr;  // true if number found
 }
 
 float getAmps() {
@@ -653,16 +511,12 @@ float getAmps() {
 
 void appendToFile(String filePath, String data, boolean closeFile) {
   if (resetFileWrite) {
-    file2 = SD.open(filePath, FILE_WRITE);
+    file = SD.open(filePath, FILE_WRITE);
     resetFileWrite = false;
   }
-  file2.print(data);
+  file.print(data);
   if (closeFile) {
-    file2.close();
+    file.close();
     resetFileWrite = true;
   }
-}
-
-int signum(float val) {
-  return (0.0 < val) - (val < 0.0);
 }
