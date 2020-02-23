@@ -18,15 +18,12 @@
 
 #define AMP_PIN A3
 #define ENABLE_AMP_PIN 5
-#define RELAY_PIN 8
+#define RELAY_PIN 7
 #define CHIP_SELECT 4
 #define POWER_CUT_PIN 2
+#define WRONG_BUTTON_PIN 6
 
 #define DELTA_THRESH 0.05
-
-#define TONE_DETECTION_PIN A2
-#define NUM_TIMES_FOR_INIT 40
-#define TONE_THRESHOLD 40
 
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
@@ -63,25 +60,9 @@ unsigned int charTrackerAmps;
 
 File file;
 
-int toneVal;
-const float varVolt1 = .00133;
-const float varProccess1 = 5e-6;
-float Pc1 = 0;
-float G1 = 0;
-float P1 = 1;
-float Xp1 = 0;
-float Zp1 = 0;
-float Xe1 = 0;
-const float varVolt2 = .00683;
-const float varProccess2 = 5e-8;
-float Pc2 = 0;
-float G2 = 0;
-float P2 = 1;
-float Xp2 = 0;
-float Zp2 = 0;
-float Xe2 = 0;
 
-bool deleteFiles = false;
+
+bool deleteFiles = true;
 
 void setup() {
   Wire.begin();
@@ -104,7 +85,7 @@ void setup() {
   data = "";
   lastTimes = 0;
   startTime = millis();
-  state = LEARN;
+  state = DATACOLLECT;
 }
 void loop() {
   if (state == DATACOLLECT) {
@@ -114,12 +95,12 @@ void loop() {
     long timeMs = millis();
     float amps = getAmps();
 
+
     if(powerCut()) {
       allowWrite = false;
     }
 
     if (allowWrite) {
-
       unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
 
       Serial.print(F("delta T: "));
@@ -274,7 +255,7 @@ void loop() {
     }
   }
   else if (state == LEARN) {
-
+    Serial.println("Got HERE");
     unsigned int dataSize = 0;
     float mean = 0;
     float variance = 0;
@@ -293,6 +274,7 @@ void loop() {
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
       File f;
       f = SD.open("MS_" + String(i) + ".txt");
+    Serial.println("Got HERE2");
 
       while (c = f.read()) {
         if (c < 0) {
@@ -354,6 +336,8 @@ void loop() {
         }
       }
       f.close();
+          Serial.println("Got HERE3");
+
     }
 
     if (dataSize != 0) {
@@ -370,6 +354,7 @@ void loop() {
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
       File f;
       f = SD.open("MS_" + String(i) + ".txt");
+    Serial.println("Got HERE4");
 
       while (c = f.read()) {
         if (c < 0) {
@@ -416,10 +401,12 @@ void loop() {
       }
       f.close();
     }
+    Serial.println("Got HERE5");
 
     if (dataSize != 0) {
       variance /= dataSize;
     }
+     Serial.println("Got HERE6");
 
     ////////////////////////////////////////////////
     //DO THE THING//////////////////////////////////
@@ -428,11 +415,20 @@ void loop() {
     float avgDivider = 0;
     unsigned int iterations = 0;
     randomSeed(analogRead(A0));
-    float randVal1 = random(minVal, maxVal);
-    float randVal2 = random(minVal, maxVal);
+        Serial.println("Got HERE7");
+
+    float randVal1 = random(minVal * 100, maxVal * 100);
+    randVal1 = randVal1 / 100.0;
+    float randVal2 = random(minVal * 100, maxVal * 100);
+    randVal2 = randVal2 / 100.0;
 
     while (randVal1 == randVal2) {
-      randVal2 = random(minVal, maxVal);
+      randVal2 = random(minVal * 100, maxVal * 100);
+      randVal2 = randVal2 / 100.0;
+          Serial.println("minVal: " + String(minVal));
+                    Serial.println("minVal: " + String(maxVal));
+
+
     }
 
     Serial.println(F("Starting Gaussian Mixture Modeling..."));
@@ -529,8 +525,8 @@ void disableAmmeter() {
 
 float getAmps() {
   float amps;
-  const float varVolt = .00583;
-  const float varProccess = 5e-6;
+  const float varVolt = .01783;
+  const float varProccess = 5e-10;
   float Pc = 0;
   float G = 0;
   float P = 1;
@@ -538,11 +534,9 @@ float getAmps() {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    float vOut = (analogRead(AMP_PIN) / 1023.0) * 5000;
-    float current = (vOut);
-    float shift = 2500 - current;
-    amps = abs(shift);
-
+    float vOut = (analogRead(AMP_PIN)- 480);
+    amps = abs(vOut);
+    
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
     P = (1 - G) * Pc;
@@ -550,7 +544,6 @@ float getAmps() {
     Zp = Xp;
     Xe = G * (amps - Zp) + Xp;
   }
-
   return Xe;
 }
 
@@ -613,53 +606,10 @@ byte getDay() {
   return bcdToDec(Wire.read());
 }
 
-void initializeToneDecoder() {
-  for (int i = 0; i++; i < NUM_TIMES_FOR_INIT) {
-    toneVal =  512 - analogRead(TONE_DETECTION_PIN);
-    toneVal = abs(toneVal);
-
-    Pc1 = P1 + varProccess1;
-    G1 = Pc1 / (Pc1 + varVolt1);
-    P1 = (1 - G1) * Pc1;
-    Xp1 = Xe1;
-    Zp1 = Xp1;
-    Xe1 = G1 * (toneVal - Zp1) + Xp1;
-
-    Pc2 = P2 + varProccess2;
-    G2 = Pc2 / (Pc2 + varVolt2);
-    P2 = (1 - G2) * Pc2;
-    Xp2 = Xe2;
-    Zp2 = Xp2;
-    Xe2 = G2 * (toneVal - Zp2) + Xp2;
-  }
-}
-boolean checkTone() {
-  for (int i = 0; i++; i < NUM_TIMES_FOR_INIT) {
-    toneVal =  512 - analogRead(TONE_DETECTION_PIN);
-    toneVal = abs(toneVal);
-
-    Pc1 = P1 + varProccess1;
-    G1 = Pc1 / (Pc1 + varVolt1);
-    P1 = (1 - G1) * Pc1;
-    Xp1 = Xe1;
-    Zp1 = Xp1;
-    Xe1 = G1 * (toneVal - Zp1) + Xp1;
-
-    Pc2 = P2 + varProccess2;
-    G2 = Pc2 / (Pc2 + varVolt2);
-    P2 = (1 - G2) * Pc2;
-    Xp2 = Xe2;
-    Zp2 = Xp2;
-    Xe2 = G2 * (toneVal - Zp2) + Xp2;
-    float ending = Xe2 - Xe1;
-    ending = abs(ending);
-    if (ending > TONE_THRESHOLD) {
-      return true;
-    }
-    return false;
-  }
+boolean checkWrongButton() {
+ return(digitalRead(WRONG_BUTTON_PIN) == HIGH);
 }
 
 boolean powerCut() {
-  return digitalRead(POWER_CUT_PIN) == HIGH;
+  return digitalRead(POWER_CUT_PIN) == LOW;
 }
