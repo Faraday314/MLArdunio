@@ -55,6 +55,8 @@ float ampPt;
 long timePt;
 long prevTime;
 
+boolean skipFile;
+
 unsigned int charTrackerTime;
 unsigned int charTrackerAmps;
 
@@ -65,6 +67,8 @@ File file;
 bool deleteFiles = true;
 
 void setup() {
+
+  skipFile = false;
   Wire.begin();
 
   Serial.begin(9600);
@@ -96,13 +100,20 @@ void loop() {
     float amps = getAmps();
 
 
-    if(powerCut()) {
+    if (powerCut()) {
       allowWrite = false;
     }
 
     if (allowWrite) {
       unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
-
+      while(skipFile){
+        Serial.println(String(lastTimes) + " " + String(fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES)));
+        if(fmod((millis() - startTime) / round(fPEM), MAX_NUMBER_OF_FILES) != lastTimes){
+          skipFile = false;
+          lastTimes = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
+          timeMs = millis();
+        }
+      }
       Serial.print(F("delta T: "));
       Serial.print(timeMs - startTime);
       Serial.print(F(", "));
@@ -114,6 +125,7 @@ void loop() {
         data = String(timeMs - startTime) + "," + String(amps) + "\r" + "\n";
 
         if (times != lastTimes) {
+
           data = String(timeMs - startTime) + "," + String(amps);
           appendToFile("MS_" + String(times - 1) + ".txt", data, true);
           Serial.println(data);
@@ -122,6 +134,10 @@ void loop() {
           lastTimes = times;
           Serial.print(F("file: "));
           Serial.println(times - 1);
+          if (SD.exists("MS_" + String(times) + ".txt")) {
+            state = LEARN;
+          }
+
         }
         else {
           appendToFile("MS_" + String(times) + ".txt", data, false);
@@ -136,6 +152,11 @@ void loop() {
         disableAmmeter();
         state = LEARN;
       }
+    }
+    else {
+      file.close();
+      SD.remove(file.name());
+      while (true) {};
     }
   }
   else if (state == OPERATE) {
@@ -152,6 +173,23 @@ void loop() {
     bool reachedComma = false;
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
+      if(checkWrongButton()){
+        skipFile = true;
+        if(i == 0){
+          SD.remove("MS_" + String(0) + ".txt");
+          SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt");
+          SD.remove("MS_" + String(1) + ".txt");
+        }
+        else if(i == MAX_NUMBER_OF_FILES - 1){
+          SD.remove("MS_" + String(0) + ".txt");
+          SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt");
+          SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 2) + ".txt");
+        }
+        SD.remove("MS_" + String(i - 1) + ".txt");
+        SD.remove("MS_" + String(i) + ".txt");
+        SD.remove("MS_" + String(i + 1) + ".txt");
+      }
+
       charTrackerTime = 0;
       charTrackerAmps = 0;
 
@@ -160,7 +198,15 @@ void loop() {
       }
 
       File f;
-      f = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+      if (SD.exists("MS_" + String(i) + ".txt")) {
+        f = SD.open("MS_" + String(i) + ".txt", FILE_READ);
+      }
+      else {
+        state = DATACOLLECT;
+        resetFileWrite = true;
+        lastTimes = i;
+        return;
+      }
 
       char c;
       while (c = f.read()) {
@@ -255,7 +301,6 @@ void loop() {
     }
   }
   else if (state == LEARN) {
-    Serial.println("Got HERE");
     unsigned int dataSize = 0;
     float mean = 0;
     float variance = 0;
@@ -274,7 +319,6 @@ void loop() {
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
       File f;
       f = SD.open("MS_" + String(i) + ".txt");
-    Serial.println("Got HERE2");
 
       while (c = f.read()) {
         if (c < 0) {
@@ -336,7 +380,7 @@ void loop() {
         }
       }
       f.close();
-          Serial.println("Got HERE3");
+
 
     }
 
@@ -354,7 +398,6 @@ void loop() {
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
       File f;
       f = SD.open("MS_" + String(i) + ".txt");
-    Serial.println("Got HERE4");
 
       while (c = f.read()) {
         if (c < 0) {
@@ -401,12 +444,9 @@ void loop() {
       }
       f.close();
     }
-    Serial.println("Got HERE5");
-
     if (dataSize != 0) {
       variance /= dataSize;
     }
-     Serial.println("Got HERE6");
 
     ////////////////////////////////////////////////
     //DO THE THING//////////////////////////////////
@@ -415,7 +455,6 @@ void loop() {
     float avgDivider = 0;
     unsigned int iterations = 0;
     randomSeed(analogRead(A0));
-        Serial.println("Got HERE7");
 
     float randVal1 = random(minVal * 100, maxVal * 100);
     randVal1 = randVal1 / 100.0;
@@ -425,8 +464,8 @@ void loop() {
     while (randVal1 == randVal2) {
       randVal2 = random(minVal * 100, maxVal * 100);
       randVal2 = randVal2 / 100.0;
-          Serial.println("minVal: " + String(minVal));
-                    Serial.println("minVal: " + String(maxVal));
+      Serial.println("minVal: " + String(minVal));
+      Serial.println("minVal: " + String(maxVal));
 
 
     }
@@ -534,9 +573,9 @@ float getAmps() {
   float Zp = 0;
   float Xe = 0;
   for (int i = 0; i < 50; i++) {
-    float vOut = (analogRead(AMP_PIN)- 480);
+    float vOut = (analogRead(AMP_PIN) - 480);
     amps = abs(vOut);
-    
+
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
     P = (1 - G) * Pc;
@@ -607,7 +646,7 @@ byte getDay() {
 }
 
 boolean checkWrongButton() {
- return(digitalRead(WRONG_BUTTON_PIN) == HIGH);
+  return (digitalRead(WRONG_BUTTON_PIN) == HIGH);
 }
 
 boolean powerCut() {
