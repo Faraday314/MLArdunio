@@ -23,7 +23,7 @@
 #define POWER_CUT_PIN 2
 #define WRONG_BUTTON_PIN 6
 
-#define DELTA_THRESH 0.05
+#define DELTA_THRESH 0.12
 
 const float TRAINING_PERIOD_MINS = 0.5;
 const float fPEM_MINS = 1 / 6.0;
@@ -64,7 +64,7 @@ File file;
 
 
 
-bool deleteFiles = true;
+bool deleteFiles = false;
 
 void setup() {
 
@@ -87,16 +87,25 @@ void setup() {
     }
   }
   data = "";
-  lastTimes = 0;
-  startTime = millis();
-  state = DATACOLLECT;
+  startTime = getTimeIntoDay();
+  lastTimes = floor(fmod(fmod(millis() + startTime, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES));
+  if(!SD.exists("MS_" + String(lastTimes) + ".txt")){
+    skipFile = true;
+  }
+  if(checkAllFilesExist()){
+    state = LEARN;
+    enablePower();
+  }
+  else{
+    state = OPERATE;
+  }
 }
 void loop() {
   if (state == DATACOLLECT) {
     enablePower();
     enableAmmeter();
 
-    long timeMs = millis();
+    long timeMs = millis() + startTime;
     float amps = getAmps();
 
 
@@ -105,53 +114,57 @@ void loop() {
     }
 
     if (allowWrite) {
-      unsigned int times = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
-      while(skipFile){
-        Serial.println(String(lastTimes) + " " + String(fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES)));
-        if(fmod((millis() - startTime) / round(fPEM), MAX_NUMBER_OF_FILES) != lastTimes){
+      unsigned int times = floor(fmod(fmod(timeMs, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES));
+      /*if(fmod(fmod(millis() + startTime, TRAINING_PERIOD), fPEM) > 1000 && times != lastTimes){
+        skipFile = true;
+      }
+      */
+      if(skipFile){
+        lastTimes = floor(fmod(fmod(millis() + startTime, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES));
+      }
+      while (skipFile) {
+        Serial.println(String(lastTimes) + " " + String(floor(fmod(fmod(millis() + startTime, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES))));
+        if (floor(fmod(fmod(millis() + startTime, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES)) != lastTimes) {
           skipFile = false;
-          lastTimes = fmod((timeMs - startTime) / round(fPEM), MAX_NUMBER_OF_FILES);
-          timeMs = millis();
+          timeMs = millis() + startTime;
+          lastTimes = floor(fmod(fmod(timeMs, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES));
+          times = floor(fmod(fmod(timeMs, TRAINING_PERIOD) / round(fPEM), MAX_NUMBER_OF_FILES));
         }
       }
       Serial.print(F("delta T: "));
-      Serial.print(timeMs - startTime);
+      Serial.print(fmod(timeMs, TRAINING_PERIOD));
       Serial.print(F(", "));
       Serial.print(F("lim: "));
       Serial.println(TRAINING_PERIOD);
 
 
-      if (timeMs - startTime < TRAINING_PERIOD) {
-        data = String(timeMs - startTime) + "," + String(amps) + "\r" + "\n";
 
-        if (times != lastTimes) {
+      data = String(fmod(timeMs, TRAINING_PERIOD)) + "," + String(amps) + "\r" + "\n";
 
-          data = String(timeMs - startTime) + "," + String(amps);
-          appendToFile("MS_" + String(times - 1) + ".txt", data, true);
-          Serial.println(data);
-          data = "";
-          Serial.println(F("RESET"));
-          lastTimes = times;
-          Serial.print(F("file: "));
-          Serial.println(times - 1);
-          if (SD.exists("MS_" + String(times) + ".txt")) {
+      if (times != lastTimes) {
+        data = String(fmod(timeMs, TRAINING_PERIOD)) + "," + String(amps);
+        appendToFile("MS_" + String(times - 1) + ".txt", data, true);
+        Serial.println(data);
+        data = "";
+        Serial.println(F("RESET"));
+        lastTimes = times;
+        Serial.print(F("file: "));
+        Serial.println(times - 1);
+        if (SD.exists("MS_" + String(times) + ".txt")) {
+          disableAmmeter();
+          if(checkAllFilesExist()){
             state = LEARN;
           }
+          else{
+            state = OPERATE;
+          }
+        }
 
-        }
-        else {
-          appendToFile("MS_" + String(times) + ".txt", data, false);
-        }
       }
       else {
-        data = String(timeMs - startTime) + "," + String(amps);
-        appendToFile("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt", data, true);
-        data = "";
-        Serial.print(F("file: "));
-        Serial.println(MAX_NUMBER_OF_FILES - 1);
-        disableAmmeter();
-        state = LEARN;
+        appendToFile("MS_" + String(times) + ".txt", data, false);
       }
+
     }
     else {
       file.close();
@@ -169,18 +182,18 @@ void loop() {
     command = OFF;
     prevTime = 0;
 
-    float deltaT = fmod((millis() - startTime), TRAINING_PERIOD);
+    float deltaT = fmod(fmod(millis() + startTime, TRAINING_PERIOD), TRAINING_PERIOD);
     bool reachedComma = false;
     for (unsigned int i = 0; i < MAX_NUMBER_OF_FILES; i++) {
 
-      if(checkWrongButton()){
+      if (checkWrongButton()) {
         skipFile = true;
-        if(i == 0){
+        if (i == 0) {
           SD.remove("MS_" + String(0) + ".txt");
           SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt");
           SD.remove("MS_" + String(1) + ".txt");
         }
-        else if(i == MAX_NUMBER_OF_FILES - 1){
+        else if (i == MAX_NUMBER_OF_FILES - 1) {
           SD.remove("MS_" + String(0) + ".txt");
           SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 1) + ".txt");
           SD.remove("MS_" + String(MAX_NUMBER_OF_FILES - 2) + ".txt");
@@ -204,7 +217,6 @@ void loop() {
       else {
         state = DATACOLLECT;
         resetFileWrite = true;
-        lastTimes = i;
         return;
       }
 
@@ -486,6 +498,7 @@ void loop() {
         f = SD.open("MS_" + String(i) + ".txt");
 
         while (c = f.read()) {
+
           if (c < 0) {
             reachedComma = false;
             ampDataPt[charTrackerAmps] = '\0';
@@ -496,6 +509,7 @@ void loop() {
             break;
           }
           else if (c == '\n') {
+
             reachedComma = false;
             ampDataPt[charTrackerAmps] = '\0';
             charTrackerAmps = 0;
@@ -506,10 +520,12 @@ void loop() {
             continue;
           }
           else if (c == '\r') {
+
             reachedComma = false;
             continue;
           }
           else if (c == ',') {
+
             reachedComma = true;
             timeDataPt[charTrackerTime] = '\0';
             charTrackerTime = 0;
@@ -539,7 +555,6 @@ void loop() {
     Serial.print(F("Divider: "));
     Serial.println(divider);
 
-    startTime = millis();
     prevTime = 0;
 
     state = OPERATE;
@@ -564,18 +579,21 @@ void disableAmmeter() {
 
 float getAmps() {
   float amps;
-  const float varVolt = .01783;
-  const float varProccess = 5e-10;
+  const float varVolt = .03783;
+  const float varProccess = 5e-8;
   float Pc = 0;
   float G = 0;
   float P = 1;
   float Xp = 0;
   float Zp = 0;
   float Xe = 0;
-  for (int i = 0; i < 50; i++) {
-    float vOut = (analogRead(AMP_PIN) - 480);
+  for (int i = 0; i < 70; i++) {
+    float vOut = (analogRead(AMP_PIN)- 480);
+    delay(1);
     amps = abs(vOut);
 
+    
+    
     Pc = P + varProccess;
     G = Pc / (Pc + varVolt);
     P = (1 - G) * Pc;
@@ -651,4 +669,12 @@ boolean checkWrongButton() {
 
 boolean powerCut() {
   return digitalRead(POWER_CUT_PIN) == LOW;
+}
+boolean checkAllFilesExist(){
+  for(int i = 0; i < MAX_NUMBER_OF_FILES; i++){
+    if(!SD.exists("MS_" + String(i) + ".txt")){
+      return false;
+    }
+  }
+  return true;
 }
